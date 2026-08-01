@@ -79,17 +79,6 @@ enum Commands {
         #[arg(long)]
         model: Option<String>,
     },
-    /// Encode text to a Model2Vec embedding vector (JSON output)
-    Encode {
-        /// Text to encode. If omitted, reads sentences from --file or stdin (one per line).
-        text: Option<String>,
-        /// Read sentences from a file (one per line).
-        #[arg(long)]
-        file: Option<String>,
-        /// Override SEMBLE_MODEL_PATH / default model (HF repo id or local path).
-        #[arg(long)]
-        model: Option<String>,
-    },
     /// Compress build/test/install/CI output (cargo, pnpm, tsc, pytest, GitHub Actions)
     Digest {
         /// Input file. If omitted, reads from stdin.
@@ -109,54 +98,6 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Encode { text, file, model } => {
-            let encoder = StaticEncoder::load(model.as_deref()).unwrap_or_else(|e| {
-                eprintln!("Failed to load model: {e}");
-                process::exit(1);
-            });
-            let inputs: Vec<String> = if let Some(t) = text {
-                vec![t]
-            } else {
-                let buf = if let Some(f) = file {
-                    std::fs::read_to_string(&f).unwrap_or_else(|e| {
-                        eprintln!("Error reading {f}: {e}");
-                        process::exit(1);
-                    })
-                } else {
-                    let mut s = String::new();
-                    if let Err(e) = std::io::stdin().read_to_string(&mut s) {
-                        eprintln!("Error reading stdin: {e}");
-                        process::exit(1);
-                    }
-                    s
-                };
-                let lines: Vec<String> = buf
-                    .lines()
-                    .filter(|l| !l.trim().is_empty())
-                    .map(|s| s.to_string())
-                    .collect();
-                if lines.is_empty() {
-                    eprintln!("No input text.");
-                    process::exit(1);
-                }
-                lines
-            };
-            let arr = encoder.encode_batch(&inputs).unwrap_or_else(|e| {
-                eprintln!("Encoding failed: {e}");
-                process::exit(1);
-            });
-            let rows: Vec<Vec<f32>> = arr.outer_iter().map(|r| r.to_vec()).collect();
-            let json = if rows.len() == 1 {
-                serde_json::to_string(&rows[0])
-            } else {
-                serde_json::to_string(&rows)
-            }
-            .unwrap_or_else(|e| {
-                eprintln!("Serialization failed: {e}");
-                process::exit(1);
-            });
-            println!("{json}");
-        }
         Commands::Digest {
             file,
             format,

@@ -102,16 +102,6 @@ Measured on 15 real-world fixtures:
 
 Auto-detection covers cargo, pnpm/npm/yarn/bun, tsc, pytest, go test, gradle, ruff, mypy, clang/gcc/cmake/make/swiftc, GitHub Actions. Force a handler with `--format <name>`; inspect with `--show-format`.
 
-## Encode
-
-`semble_rs encode` exposes the embedding model as a CLI for scripting and debugging:
-
-```bash
-semble_rs encode "search result scoring"            # one vector → JSON array
-echo -e "auth\nlogin\ntoken" | semble_rs encode     # stdin, one sentence per line
-semble_rs encode "x" --model minishlab/potion-multilingual-128M
-```
-
 ## Agent integration
 
 Append a snippet like the following to your project-root `CLAUDE.md` or `AGENTS.md`. It works for Claude Code, Codex, Cursor (`.cursorrules`), Aider, and OpenHands.
