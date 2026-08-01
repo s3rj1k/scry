@@ -7,12 +7,11 @@ Use `semble_rs` to keep code exploration and build logs small.
 Prefer the smallest useful command.
 
 ```bash
-semble_rs plan "<task>" . -k 5                 # step 0: new repo / ambiguous task
 semble_rs search "<feature>" . --outline -k 8  # pass 1: structural overview
 semble_rs search "<feature-or-symbol>" . --compact -k 8
 ```
 
-Start with `plan` on a new repo or when the starting point is unclear. Treat `Confidence: low` candidates as leads, not facts. If the feature or symbol is already known, skip `plan` and go straight to `search --outline` or `search --compact`.
+Start with `search --outline` for a structural overview, then narrow with `search --compact`. Treat weak matches as leads, not facts.
 
 ## Token Discipline
 

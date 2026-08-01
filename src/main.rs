@@ -8,7 +8,6 @@ use semble::encoder::StaticEncoder;
 use semble::filter::smart_strip;
 use semble::index::SembleIndex;
 use semble::outline::extract_signature_near;
-use semble::plan::{build_plan, print_plan};
 use semble::types::SearchResult;
 use semble::utils::{format_results, resolve_chunk};
 
@@ -74,26 +73,6 @@ enum Commands {
         #[arg(long)]
         include_text_files: bool,
         /// Output as JSON (for agent/tool integration)
-        #[arg(long)]
-        json: bool,
-        /// Embedding model (HF repo id or local path).
-        #[arg(long)]
-        model: Option<String>,
-    },
-    /// Recommend a token-efficient exploration flow for a task
-    Plan {
-        /// Natural-language task or feature to investigate
-        task: String,
-        /// Local path (default: current directory)
-        #[arg(default_value = ".")]
-        path: String,
-        /// Number of candidate chunks to use
-        #[arg(short = 'k', long = "top-k", default_value = "8")]
-        top_k: usize,
-        /// Also index non-code text files (.md, .yaml, .json, etc.)
-        #[arg(long)]
-        include_text_files: bool,
-        /// Output as JSON
         #[arg(long)]
         json: bool,
         /// Embedding model (HF repo id or local path).
@@ -210,27 +189,6 @@ fn main() {
             }
             let out = digest::digest(&text, fmt);
             println!("{out}");
-        }
-        Commands::Plan {
-            task,
-            path,
-            top_k,
-            include_text_files,
-            json,
-            model,
-        } => {
-            let index = build_index(&path, include_text_files, model.as_deref());
-            let results = index.search(task.as_str(), top_k, None, None, None);
-            let report = build_plan(&task, &path, top_k, &results);
-
-            if json {
-                println!(
-                    "{}",
-                    serde_json::to_string(&report).unwrap_or_else(|_| "{}".to_string())
-                );
-            } else {
-                print_plan(&report);
-            }
         }
         Commands::Search {
             query,

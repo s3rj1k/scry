@@ -7,7 +7,6 @@ pub mod filter;
 pub mod graph;
 pub mod index;
 pub mod outline;
-pub mod plan;
 pub mod ranking;
 pub mod search;
 pub mod tokens;

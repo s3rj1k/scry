@@ -70,16 +70,6 @@ Given a `file:line` from a previous search result, returns chunks semantically s
 semble_rs find-related src/auth.rs 42 ./my-project
 ```
 
-### `plan`
-
-When the agent doesn't know where to start, `plan` runs a small search and prints a recommended sequence of `--outline` / `--group` / `--compact` commands.
-
-```bash
-semble_rs plan "fix auth flow bug" ./my-project -k 5
-```
-
-`plan` is a guardrail, not an oracle: low-confidence candidates are leads, not facts. Skip it when the symbol or feature name is already known.
-
 ### `--model`
 
 All search-side commands accept `--model <hf-repo-or-local-path>` to override the default embedder. Also honours the `SEMBLE_MODEL_PATH` environment variable.
