@@ -1,10 +1,10 @@
-<!-- Keywords: code search, semantic code search, AI agent, LLM, BM25, embeddings, tree-sitter, AST, dependency graph, impact analysis, Rust, CLI, Claude Code, Codex, Cursor, grep replacement, token reduction, potion-code, model2vec, hybrid search, RRF, build output digest, CI log compression, korean code search, 한글 코드 검색 -->
+<!-- Keywords: code search, semantic code search, AI agent, LLM, BM25, embeddings, tree-sitter, AST, dependency graph, impact analysis, Rust, CLI, Claude Code, Codex, Cursor, grep replacement, token reduction, potion-code, model2vec, hybrid search, RRF, build output digest, CI log compression -->
 
 <h2 align="center"> semble_rs<br/> Fast and Accurate Code Search for Agents — in Rust<br/> <sub>Replaces grep / cat / read / ls and compresses build & CI output. Up to <b>-99%</b> tokens.</sub> </h2>
 
 <div align="center">
 
-<p> <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a> <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Rust"></a> <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg" alt="Platform"> <a href="#benchmarks"><img src="https://img.shields.io/badge/agent%20tokens-up%20to%20--99%25-brightgreen.svg" alt="Token savings"></a> <a href="./README.ko.md"><img src="https://img.shields.io/badge/%ED%95%9C%EA%B5%AD%EC%96%B4-README.ko.md-blue.svg" alt="한국어"></a> </p>
+<p> <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a> <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Rust"></a> <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg" alt="Platform"> <a href="#benchmarks"><img src="https://img.shields.io/badge/agent%20tokens-up%20to%20--99%25-brightgreen.svg" alt="Token savings"></a> </p>
 
 <p> <a href="#quickstart">Quickstart</a> • <a href="#search">Search</a> • <a href="#digest">Digest</a> • <a href="#how-it-works">How it works</a> • <a href="#benchmarks">Benchmarks</a> </p>
 
@@ -185,9 +185,6 @@ The embedder is fully static (vocab embedding lookup → mean pool → SIF weigh
 | nl_feature | 40 | 75% | 98% | 100% | 0.83 |
 | scenario | 10 | 70% | 100% | 100% | 0.77 |
 | acronym | 10 | 50% | 70% | 70% | 0.56 |
-| korean | 10 | 10% | 60% | 80% | 0.27 |
-
-Query set: `docs/eval_set_100.json` · per-miss analysis: `docs/benchmark_100.md`.
 
 ### Indexing and query latency by repo size
 
