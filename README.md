@@ -6,7 +6,7 @@
 
 <p> <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a> <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Rust"></a> <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg" alt="Platform"> <a href="#benchmarks"><img src="https://img.shields.io/badge/agent%20tokens-up%20to%20--99%25-brightgreen.svg" alt="Token savings"></a> <a href="./README.ko.md"><img src="https://img.shields.io/badge/%ED%95%9C%EA%B5%AD%EC%96%B4-README.ko.md-blue.svg" alt="한국어"></a> </p>
 
-<p> <a href="#quickstart">Quickstart</a> • <a href="#search">Search</a> • <a href="#digest">Digest</a> • <a href="#dependency-graph">Deps / Impact</a> • <a href="#how-it-works">How it works</a> • <a href="#benchmarks">Benchmarks</a> </p>
+<p> <a href="#quickstart">Quickstart</a> • <a href="#search">Search</a> • <a href="#digest">Digest</a> • <a href="#how-it-works">How it works</a> • <a href="#benchmarks">Benchmarks</a> </p>
 
 </div>
 
@@ -38,7 +38,6 @@ For agent integration (Claude Code, Codex, Cursor), see [Agent integration](#age
 - **Fast**: indexes the local repo (22 files) in \~150 ms, \~10 s on 1,600 files. Static embedder — no transformer forward pass at query time.
 - **Token-efficient**: `--outline` is **-47%** vs full output; `digest` reaches **-98.9%** on real GitHub Actions logs.
 - **Hybrid retrieval**: BM25 + Model2Vec embeddings fused with RRF, then reranked with definition / identifier-stem / file-coherence boosts and noise penalties.
-- **Dependency graph**: `deps` / `impact` show what a file imports, defines, and what changes if you touch it. Optional Graphviz `--dot` output.
 - **Build / CI compression**: `digest` auto-detects cargo, pnpm/npm/yarn/bun, tsc, pytest, go test, gradle, ruff, mypy, clang/gcc/cmake/make/swiftc, GitHub Actions.
 - **Single binary**: no Python, no daemon, no API keys. Runs on CPU.
 
@@ -73,7 +72,7 @@ semble_rs find-related src/auth.rs 42 ./my-project
 
 ### `plan`
 
-When the agent doesn't know where to start, `plan` runs a small search and prints a recommended sequence of `--outline` / `--group` / `--compact` / `deps` / `impact` commands.
+When the agent doesn't know where to start, `plan` runs a small search and prints a recommended sequence of `--outline` / `--group` / `--compact` commands.
 
 ```bash
 semble_rs plan "fix auth flow bug" ./my-project -k 5
@@ -113,22 +112,6 @@ Measured on 15 real-world fixtures:
 
 Auto-detection covers cargo, pnpm/npm/yarn/bun, tsc, pytest, go test, gradle, ruff, mypy, clang/gcc/cmake/make/swiftc, GitHub Actions. Force a handler with `--format <name>`; inspect with `--show-format`.
 
-## Dependency graph
-
-```bash
-semble_rs deps   src/auth.rs ./my-project                  # what this file imports / defines (flat)
-semble_rs deps   src/auth.rs ./my-project --tree           # transitive imports as ASCII tree
-semble_rs deps   src/auth.rs ./my-project --tree --max-depth 3
-semble_rs deps   src/auth.rs ./my-project --dot | dot -Tpng > deps.png
-semble_rs impact src/auth.rs ./my-project                  # who depends on this file (flat list)
-semble_rs impact src/auth.rs ./my-project --tree           # reverse-dependency tree
-semble_rs impact src/auth.rs ./my-project --dot | dot -Tpng > impact.png
-```
-
-`--tree` (v0.9.1+) renders forward (`deps`) or reverse (`impact`) dependencies as an ASCII tree with cycle detection (repeated nodes marked `(cycle)`) and `--max-depth N` truncation (`…`). No external tool required, agent-readable.
-
-`impact` is intended to be run before edits to a shared module to avoid surprises.
-
 ## Encode
 
 `semble_rs encode` exposes the embedding model as a CLI for scripting and debugging:
@@ -151,8 +134,6 @@ Use `semble_rs` instead of `ls -R`, `grep`, `cat`:
 ​```bash
 semble_rs search "<feature or symbol>" . --outline # pass 1
 semble_rs search "<feature or symbol>" . --compact # pass 2
-semble_rs deps   <file> .                          # what file imports / defines
-semble_rs impact <file> .                          # files affected by changes
 ​```
 
 Compress noisy command output before reading it:

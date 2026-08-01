@@ -10,8 +10,6 @@ Prefer the smallest useful command.
 semble_rs plan "<task>" . -k 5                 # step 0: new repo / ambiguous task
 semble_rs search "<feature>" . --outline -k 8  # pass 1: structural overview
 semble_rs search "<feature-or-symbol>" . --compact -k 8
-semble_rs deps   <file> . --tree   # what file imports (ASCII tree, cycle-aware)
-semble_rs impact <file> . --tree   # who depends on file (reverse tree)
 ```
 
 Start with `plan` on a new repo or when the starting point is unclear. Treat `Confidence: low` candidates as leads, not facts. If the feature or symbol is already known, skip `plan` and go straight to `search --outline` or `search --compact`.
@@ -22,7 +20,6 @@ Start with `plan` on a new repo or when the starting point is unclear. Treat `Co
 - Do not use `--json` or chunk bodies unless compact results are insufficient.
 - Search with natural-language feature descriptions before guessing symbol names.
 - Pass a directory path to search commands, not a single file path.
-- Use `deps` and `impact` before editing shared or central files.
 - Use `--model <repo-or-path>` (or `SEMBLE_MODEL_PATH` env) to override the default embedder per-call. Default: `minishlab/potion-code-16M`.
 - Fall back to raw `grep`, `cat`, `find`, or `ls` only when `semble_rs` is insufficient.
 
