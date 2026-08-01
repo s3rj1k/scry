@@ -7,17 +7,14 @@ Use `semble_rs` to keep code exploration and build logs small.
 Prefer the smallest useful command.
 
 ```bash
-semble_rs tree . --symbols                     # step 0: codebase map (replaces ls -R, 4×–747× cheaper)
-semble_rs plan "<task>" . -k 5                 # optional 0.5: ambiguous task / new repo
+semble_rs plan "<task>" . -k 5                 # step 0: new repo / ambiguous task
 semble_rs search "<feature>" . --outline -k 8  # pass 1: structural overview
 semble_rs search "<feature-or-symbol>" . --compact -k 8
 semble_rs deps   <file> . --tree   # what file imports (ASCII tree, cycle-aware)
 semble_rs impact <file> . --tree   # who depends on file (reverse tree)
 ```
 
-Start with `tree --symbols` on a new repo — gitignore-aware, ~150 ms. Use `plan` when the starting point is still unclear. Treat `Confidence: low` candidates as leads, not facts. If the feature or symbol is already known, skip `tree`/`plan` and go straight to `search --outline` or `search --compact`.
-
-`tree` options: `-d` (dirs only), `--max-depth N`, `--symbols` (top-level fn / struct / class), `--lang rust,python` (filter).
+Start with `plan` on a new repo or when the starting point is unclear. Treat `Confidence: low` candidates as leads, not facts. If the feature or symbol is already known, skip `plan` and go straight to `search --outline` or `search --compact`.
 
 ## Token Discipline
 
