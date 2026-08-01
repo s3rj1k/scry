@@ -186,8 +186,6 @@ gh run view <id> --log-failed | semble_rs digest
 ​```
 ```
 
-`semble_rs savings` shows estimated tokens saved across past searches.
-
 ## How it works
 
 `semble_rs` chunks every file with `tree-sitter` at function / class / module boundaries (line-based fallback for unsupported languages), then scores every query with two complementary retrievers: static [Model2Vec](https://github.com/MinishLab/model2vec) embeddings (default `minishlab/potion-code-16M`) for semantic similarity, and BM25 for lexical matches on identifiers and API names. Score lists are fused with Reciprocal Rank Fusion.

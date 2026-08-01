@@ -210,8 +210,6 @@ gh run view <id> --log-failed | semble_rs digest
 ​```
 ```
 
-`semble_rs savings`로 누적 토큰 절감량을 확인할 수 있습니다.
-
 ## 구조
 
 `semble_rs`는 `tree-sitter`로 모든 파일을 함수 / 클래스 / 모듈 단위 청크로 분할합니다 (지원 안 되는 언어는 라인 기반 fallback). 그 후 두 개의 보완적 retriever로 쿼리를 채점합니다: 시맨틱 유사도용 정적 [Model2Vec](https://github.com/MinishLab/model2vec) 임베딩 (기본 `minishlab/potion-code-16M`), 그리고 식별자 / API명 매칭용 BM25. 두 점수 리스트는 Reciprocal Rank Fusion으로 융합됩니다.

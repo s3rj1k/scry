@@ -10,7 +10,6 @@ pub mod outline;
 pub mod plan;
 pub mod ranking;
 pub mod search;
-pub mod stats;
 pub mod tokens;
 pub mod tree;
 pub mod types;

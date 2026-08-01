@@ -9,8 +9,7 @@ use crate::bm25::Bm25Index;
 use crate::encoder::{SemanticIndex, StaticEncoder};
 use crate::graph::DependencyGraph;
 use crate::search::search_hybrid;
-use crate::stats::save_search_stats;
-use crate::types::{CallType, Chunk, IndexStats, SearchResult};
+use crate::types::{Chunk, IndexStats, SearchResult};
 use create::create_index_from_path;
 
 use std::collections::HashSet;
@@ -22,7 +21,6 @@ pub struct SembleIndex {
     chunks: Vec<Chunk>,
     #[allow(dead_code)]
     root: Option<PathBuf>,
-    file_sizes: HashMap<String, usize>,
     file_mapping: HashMap<String, Vec<usize>>,
     language_mapping: HashMap<String, Vec<usize>>,
     graph: DependencyGraph,
@@ -58,7 +56,6 @@ impl SembleIndex {
             &path,
         )?;
 
-        let file_sizes = compute_file_sizes(&path, &chunks);
         let (file_mapping, language_mapping) = build_mappings(&chunks);
 
         Ok(Self {
@@ -67,7 +64,6 @@ impl SembleIndex {
             semantic_index,
             chunks,
             root: Some(path),
-            file_sizes,
             file_mapping,
             language_mapping,
             graph,
@@ -101,7 +97,6 @@ impl SembleIndex {
             Some(&self.graph),
         );
 
-        save_search_stats(&results, CallType::Search, &self.file_sizes);
         results
     }
 
@@ -131,7 +126,6 @@ impl SembleIndex {
             })
             .collect();
 
-        save_search_stats(&results, CallType::FindRelated, &self.file_sizes);
         results
     }
 
@@ -184,19 +178,6 @@ impl SembleIndex {
             Some(indices)
         }
     }
-}
-
-fn compute_file_sizes(root: &Path, chunks: &[Chunk]) -> HashMap<String, usize> {
-    let mut sizes: HashMap<String, usize> = HashMap::new();
-    for chunk in chunks {
-        if sizes.contains_key(&chunk.file_path) {
-            continue;
-        }
-        if let Ok(content) = std::fs::read_to_string(root.join(&chunk.file_path)) {
-            sizes.insert(chunk.file_path.clone(), content.len());
-        }
-    }
-    sizes
 }
 
 fn build_mappings(chunks: &[Chunk]) -> (HashMap<String, Vec<usize>>, HashMap<String, Vec<usize>>) {

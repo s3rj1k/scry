@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize)]
 pub struct Chunk {
@@ -44,21 +43,6 @@ pub struct SearchResult {
     pub score: f64,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub match_lines: Vec<MatchLine>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CallType {
-    Search,
-    FindRelated,
-}
-
-impl fmt::Display for CallType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            CallType::Search => write!(f, "search"),
-            CallType::FindRelated => write!(f, "find_related"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize)]

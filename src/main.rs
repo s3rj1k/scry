@@ -9,7 +9,6 @@ use semble::filter::smart_strip;
 use semble::index::SembleIndex;
 use semble::outline::extract_signature_near;
 use semble::plan::{build_plan, print_plan};
-use semble::stats::format_savings_report;
 use semble::tree::{render as render_tree, TreeOptions};
 use semble::types::SearchResult;
 use semble::utils::{format_results, resolve_chunk};
@@ -141,12 +140,6 @@ enum Commands {
         /// Embedding model (HF repo id or local path).
         #[arg(long)]
         model: Option<String>,
-    },
-    /// Show token savings and usage stats
-    Savings {
-        /// Show usage breakdown by call type
-        #[arg(long)]
-        verbose: bool,
     },
     /// Print the codebase file tree (gitignore-aware, no `ls -R` token explosion)
     Tree {
@@ -297,9 +290,6 @@ fn main() {
             }
             let out = digest::digest(&text, fmt);
             println!("{out}");
-        }
-        Commands::Savings { verbose } => {
-            print!("{}", format_savings_report(verbose));
         }
         Commands::Deps {
             file_path,
