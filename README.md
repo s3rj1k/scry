@@ -151,16 +151,6 @@ semble_rs impact src/auth.rs ./my-project --dot | dot -Tpng > impact.png
 
 `impact` is intended to be run before edits to a shared module to avoid surprises.
 
-### `find-pattern`
-
-Thin wrapper around `ast-grep` for structural queries that semantic search can't express:
-
-```bash
-semble_rs find-pattern 'fn $name($$$)' . --lang rust --compact
-```
-
-Requires `ast-grep` installed (`brew install ast-grep` or `cargo install ast-grep`).
-
 ## Encode
 
 `semble_rs encode` exposes the embedding model as a CLI for scripting and debugging:
