@@ -1,9 +1,7 @@
-use std::io::Read;
 use std::process;
 
 use clap::{Parser, Subcommand};
 
-use semble::digest::{self, Format};
 use semble::encoder::StaticEncoder;
 use semble::filter::smart_strip;
 use semble::index::SembleIndex;
@@ -79,18 +77,6 @@ enum Commands {
         #[arg(long)]
         model: Option<String>,
     },
-    /// Compress build/test/install/CI output (cargo, pnpm, tsc, pytest, GitHub Actions)
-    Digest {
-        /// Input file. If omitted, reads from stdin.
-        file: Option<String>,
-        /// Force a specific format (auto-detects if omitted).
-        /// Values: cargo, pnpm, tsc, pytest, ci.
-        #[arg(long, default_value = "auto")]
-        format: String,
-        /// Print the detected format on stderr.
-        #[arg(long)]
-        show_format: bool,
-    },
 }
 
 fn main() {
@@ -98,39 +84,6 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Digest {
-            file,
-            format,
-            show_format,
-        } => {
-            let text = match file {
-                Some(path) => std::fs::read_to_string(&path).unwrap_or_else(|e| {
-                    eprintln!("Error reading {path}: {e}");
-                    process::exit(1);
-                }),
-                None => {
-                    let mut buf = String::new();
-                    if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
-                        eprintln!("Error reading stdin: {e}");
-                        process::exit(1);
-                    }
-                    buf
-                }
-            };
-            let fmt = if format == "auto" {
-                digest::detect(&text)
-            } else {
-                Format::parse(&format).unwrap_or_else(|| {
-                    eprintln!("Unknown --format value: {format}. Valid: cargo, pnpm, tsc, pytest, ci, auto.");
-                    process::exit(1);
-                })
-            };
-            if show_format {
-                eprintln!("[digest] format={}", fmt.as_str());
-            }
-            let out = digest::digest(&text, fmt);
-            println!("{out}");
-        }
         Commands::Search {
             query,
             path,

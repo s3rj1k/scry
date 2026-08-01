@@ -22,27 +22,6 @@ Start with `search --outline` for a structural overview, then narrow with `searc
 - Use `--model <repo-or-path>` (or `SEMBLE_MODEL_PATH` env) to override the default embedder per-call. Default: `minishlab/potion-code-16M`.
 - Fall back to raw `grep`, `cat`, `find`, or `ls` only when `semble_rs` is insufficient.
 
-## Build And Test Output
-
-Always pipe noisy commands through `semble_rs digest`.
-
-```bash
-cargo build 2>&1   | semble_rs digest
-cargo test 2>&1    | semble_rs digest
-pnpm install 2>&1  | semble_rs digest
-pytest 2>&1        | semble_rs digest
-gradle test 2>&1   | semble_rs digest
-tsc --noEmit 2>&1  | semble_rs digest
-go test ./... 2>&1 | semble_rs digest
-ruff check . 2>&1  | semble_rs digest
-mypy . 2>&1        | semble_rs digest
-make 2>&1          | semble_rs digest
-swift build 2>&1   | semble_rs digest
-gh run view <id> --log-failed | semble_rs digest
-```
-
-`digest` keeps errors, file locations, tracebacks, panic stacks, and failed CI bodies. It only collapses progress noise.
-
 ## Reporting
 
 When summarizing work, keep it short:
@@ -52,4 +31,4 @@ When summarizing work, keep it short:
 - verification command
 - remaining risk or low-confidence area
 
-Do not quote fixed whole-session savings unless a workflow benchmark was run. It is okay to cite measured command-level savings, such as `digest` fixture results or byte counts from `wc -c`.
+Do not quote fixed whole-session savings unless a workflow benchmark was run. It is okay to cite measured command-level savings, such as byte counts from `wc -c`.
