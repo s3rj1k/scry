@@ -9,7 +9,6 @@ use semble::filter::smart_strip;
 use semble::index::SembleIndex;
 use semble::outline::extract_signature_near;
 use semble::plan::{build_plan, print_plan};
-use semble::tree::{render as render_tree, TreeOptions};
 use semble::types::SearchResult;
 use semble::utils::{format_results, resolve_chunk};
 
@@ -141,27 +140,6 @@ enum Commands {
         #[arg(long)]
         model: Option<String>,
     },
-    /// Print the codebase file tree (gitignore-aware, no `ls -R` token explosion)
-    Tree {
-        /// Local path (default: current directory)
-        #[arg(default_value = ".")]
-        path: String,
-        /// Show directories only
-        #[arg(short = 'd', long)]
-        dirs_only: bool,
-        /// Limit tree depth
-        #[arg(long)]
-        max_depth: Option<usize>,
-        /// Append top-level symbols (fn, struct, class, enum, ...) per file
-        #[arg(long)]
-        symbols: bool,
-        /// Filter languages (comma-separated, e.g. rust,python)
-        #[arg(long, value_delimiter = ',')]
-        lang: Option<Vec<String>>,
-        /// Also index non-code text files
-        #[arg(long)]
-        include_text_files: bool,
-    },
     /// Encode text to a Model2Vec embedding vector (JSON output)
     Encode {
         /// Text to encode. If omitted, reads sentences from --file or stdin (one per line).
@@ -192,24 +170,6 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Tree {
-            path,
-            dirs_only,
-            max_depth,
-            symbols,
-            lang,
-            include_text_files,
-        } => {
-            let index = build_index(&path, include_text_files, None);
-            let opts = TreeOptions {
-                dirs_only,
-                max_depth,
-                symbols,
-                langs: lang.as_deref(),
-            };
-            let out = render_tree(index.chunks(), index.graph(), &opts);
-            print!("{out}");
-        }
         Commands::Encode { text, file, model } => {
             let encoder = StaticEncoder::load(model.as_deref()).unwrap_or_else(|e| {
                 eprintln!("Failed to load model: {e}");

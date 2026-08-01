@@ -11,7 +11,6 @@ pub mod plan;
 pub mod ranking;
 pub mod search;
 pub mod tokens;
-pub mod tree;
 pub mod types;
 pub mod utils;
 

@@ -6,11 +6,11 @@
 
 <p> <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a> <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Rust"></a> <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg" alt="Platform"> <a href="#benchmarks"><img src="https://img.shields.io/badge/agent%20tokens-up%20to%20--99%25-brightgreen.svg" alt="Token savings"></a> <a href="./README.ko.md"><img src="https://img.shields.io/badge/%ED%95%9C%EA%B5%AD%EC%96%B4-README.ko.md-blue.svg" alt="한국어"></a> </p>
 
-<p> <a href="#quickstart">Quickstart</a> • <a href="#search">Search</a> • <a href="#tree">Tree</a> • <a href="#digest">Digest</a> • <a href="#dependency-graph">Deps / Impact</a> • <a href="#how-it-works">How it works</a> • <a href="#benchmarks">Benchmarks</a> </p>
+<p> <a href="#quickstart">Quickstart</a> • <a href="#search">Search</a> • <a href="#digest">Digest</a> • <a href="#dependency-graph">Deps / Impact</a> • <a href="#how-it-works">How it works</a> • <a href="#benchmarks">Benchmarks</a> </p>
 
 </div>
 
-`semble_rs` is a Rust port and superset of [MinishLab/semble](https://github.com/MinishLab/semble) built for AI coding agents. It returns the exact code chunks an agent needs, prints a token-cheap codebase tree instead of `ls -R`, and compresses 3 MB CI logs into 35 KB. One single binary, no daemon, no API keys, no GPU. Hybrid BM25 + [Model2Vec](https://github.com/MinishLab/model2vec) static embeddings with code-aware reranking, plus a dependency graph, AST chunking, and a `digest` pipeline for build / test / CI output.
+`semble_rs` is a Rust port and superset of [MinishLab/semble](https://github.com/MinishLab/semble) built for AI coding agents. It returns the exact code chunks an agent needs and compresses 3 MB CI logs into 35 KB. One single binary, no daemon, no API keys, no GPU. Hybrid BM25 + [Model2Vec](https://github.com/MinishLab/model2vec) static embeddings with code-aware reranking, plus a dependency graph, AST chunking, and a `digest` pipeline for build / test / CI output.
 
 ## Quickstart
 
@@ -23,9 +23,6 @@ cargo install --path .
 The binary lands at `~/.cargo/bin/semble_rs`. On first run, the default embedding model `minishlab/potion-code-16M` (\~60 MB) is downloaded from HuggingFace.
 
 ```bash
-# Map the codebase (replaces ls -R)
-semble_rs tree ./my-project --symbols
-
 # Find code by what it does (replaces grep + cat)
 semble_rs search "how is auth handled" ./my-project --outline
 
@@ -39,7 +36,7 @@ For agent integration (Claude Code, Codex, Cursor), see [Agent integration](#age
 ## Main Features
 
 - **Fast**: indexes the local repo (22 files) in \~150 ms, \~10 s on 1,600 files. Static embedder — no transformer forward pass at query time.
-- **Token-efficient**: `tree` collapses `ls -R` by **4×–747×**; `--outline` is **-47%** vs full output; `digest` reaches **-98.9%** on real GitHub Actions logs.
+- **Token-efficient**: `--outline` is **-47%** vs full output; `digest` reaches **-98.9%** on real GitHub Actions logs.
 - **Hybrid retrieval**: BM25 + Model2Vec embeddings fused with RRF, then reranked with definition / identifier-stem / file-coherence boosts and noise penalties.
 - **Dependency graph**: `deps` / `impact` show what a file imports, defines, and what changes if you touch it. Optional Graphviz `--dot` output.
 - **Build / CI compression**: `digest` auto-detects cargo, pnpm/npm/yarn/bun, tsc, pytest, go test, gradle, ruff, mypy, clang/gcc/cmake/make/swiftc, GitHub Actions.
@@ -87,24 +84,6 @@ semble_rs plan "fix auth flow bug" ./my-project -k 5
 ### `--model`
 
 All search-side commands accept `--model <hf-repo-or-local-path>` to override the default embedder. Also honours the `SEMBLE_MODEL_PATH` environment variable.
-
-## Tree
-
-`semble_rs tree` prints the codebase file tree using the same gitignore-aware index as `search`. It exists because `ls -R` on a real project explodes into tens or hundreds of thousands of tokens (`.git/`, `target/`, `node_modules/` all included). Measured on real repos:
-
-| Project | `semble_rs tree` | `ls -R` | Reduction |
-| --- | --- | --- | --- |
-| this repo (Rust + `target/`) | **533 B** | 398,101 B | **747×** |
-| 6,693-file Python backend | **3,950 B** | 254,066 B | **64×** |
-| 325-file ML training repo | 838 B | 7,522 B | 9× |
-
-```bash
-semble_rs tree                              # current directory
-semble_rs tree -d                           # directories only
-semble_rs tree --max-depth 2                # cap depth
-semble_rs tree --symbols                    # append top-level symbols per file
-semble_rs tree --lang rust,python           # filter by language
-```
 
 ## Digest
 
@@ -170,7 +149,6 @@ Append a snippet like the following to your project-root `CLAUDE.md` or `AGENTS.
 Use `semble_rs` instead of `ls -R`, `grep`, `cat`:
 
 ​```bash
-semble_rs tree . --symbols                         # codebase map (cheap)
 semble_rs search "<feature or symbol>" . --outline # pass 1
 semble_rs search "<feature or symbol>" . --compact # pass 2
 semble_rs deps   <file> .                          # what file imports / defines
@@ -248,9 +226,6 @@ Measured on real projects:
 
 | Operation | `semble_rs` | Native | Reduction |
 | --- | --- | --- | --- |
-| **Codebase map** (this repo) | `tree` **533 B** | `ls -R` 398 KB | **747×** |
-| **Codebase map** (6,693-file Python backend) | `tree` **3,950 B** | `ls -R` 254 KB | **64×** |
-| **Codebase map** (325-file Python repo) | `tree` 838 B | `ls -R` 7,522 B | 9× |
 | **Code chunk lookup** (`--outline` vs `--compact`) | \-47% | baseline | \-47% |
 | **Build log** (`cargo build` clean) | `digest` 59 B | raw 7,611 B | **-99.2%** |
 | **CI failure log** (real GitHub Actions, rust-lang/rust) | `digest` 35 KB | raw 3.3 MB | **-98.9%** ⭐ |

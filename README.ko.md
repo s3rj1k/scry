@@ -15,7 +15,6 @@
 <p>
   <a href="#%EB%B9%A0%EB%A5%B8-%EC%8B%9C%EC%9E%91">빠른 시작</a> •
   <a href="#search">Search</a> •
-  <a href="#tree">Tree</a> •
   <a href="#digest">Digest</a> •
   <a href="#%EC%9D%98%EC%A1%B4%EC%84%B1-%EA%B7%B8%EB%9E%98%ED%94%84">Deps / Impact</a> •
   <a href="#%EA%B5%AC%EC%A1%B0">구조</a> •
@@ -24,7 +23,7 @@
 
 </div>
 
-`semble_rs`는 [MinishLab/semble](https://github.com/MinishLab/semble)의 Rust 포팅 + 확장판으로, AI 코딩 에이전트를 위해 설계되었습니다. 에이전트가 필요로 하는 정확한 코드 청크만 반환하고, `ls -R` 대신 토큰이 저렴한 코드베이스 트리를 출력하며, 3 MB CI 로그를 35 KB로 압축합니다. 단일 Rust 바이너리, daemon 없음, API key 없음, GPU 불필요. BM25 + [Model2Vec](https://github.com/MinishLab/model2vec) 정적 임베딩의 하이브리드 검색에 코드 인식 reranking이 더해지고, 의존성 그래프와 AST 청킹, 빌드 / 테스트 / CI 출력을 위한 `digest` 파이프라인을 함께 제공합니다.
+`semble_rs`는 [MinishLab/semble](https://github.com/MinishLab/semble)의 Rust 포팅 + 확장판으로, AI 코딩 에이전트를 위해 설계되었습니다. 에이전트가 필요로 하는 정확한 코드 청크만 반환하고, 3 MB CI 로그를 35 KB로 압축합니다. 단일 Rust 바이너리, daemon 없음, API key 없음, GPU 불필요. BM25 + [Model2Vec](https://github.com/MinishLab/model2vec) 정적 임베딩의 하이브리드 검색에 코드 인식 reranking이 더해지고, 의존성 그래프와 AST 청킹, 빌드 / 테스트 / CI 출력을 위한 `digest` 파이프라인을 함께 제공합니다.
 
 ## 빠른 시작
 
@@ -37,9 +36,6 @@ cargo install --path .
 바이너리는 `~/.cargo/bin/semble_rs`에 설치됩니다. 첫 실행 시 기본 임베딩 모델 `minishlab/potion-code-16M` (\~60 MB)이 HuggingFace에서 자동 다운로드됩니다.
 
 ```bash
-# 코드베이스 지도 (ls -R 대체)
-semble_rs tree ./my-project --symbols
-
 # 의미로 코드 찾기 (grep + cat 대체)
 semble_rs search "인증 어디서 처리하지" ./my-project --outline
 
@@ -53,7 +49,7 @@ gh run view <id> --log-failed | semble_rs digest
 ## 주요 기능
 
 - **빠름**: 이 저장소(22 파일) 인덱싱 \~150 ms, 1,600 파일 \~10 s. 정적 임베더 — 쿼리 시 transformer forward pass 없음.
-- **토큰 효율**: `tree`는 `ls -R` 대비 **4×–747×** 압축, `--outline`은 `--compact` 대비 **-47%**, `digest`는 실제 GitHub Actions 로그에서 **-98.9%**.
+- **토큰 효율**: `--outline`은 `--compact` 대비 **-47%**, `digest`는 실제 GitHub Actions 로그에서 **-98.9%**.
 - **하이브리드 검색**: BM25 + Model2Vec 임베딩을 RRF로 융합 후 정의 / 식별자 stem / 파일 일관성 boost와 노이즈 페널티로 reranking.
 - **의존성 그래프**: `deps` / `impact`가 파일이 import하고 정의하는 것 + 변경 시 영향받는 파일을 표시. Graphviz `--dot` 출력 옵션.
 - **빌드 / CI 압축**: `digest`가 cargo, pnpm/npm/yarn/bun, tsc, pytest, go test, gradle, ruff, mypy, clang/gcc/cmake/make/swiftc, GitHub Actions를 자동 감지.
@@ -101,24 +97,6 @@ semble_rs plan "인증 버그 고치기" ./my-project -k 5
 ### `--model`
 
 모든 search 계열 명령은 `--model <hf-repo-or-local-path>` 옵션으로 임베더를 교체할 수 있습니다. `SEMBLE_MODEL_PATH` 환경변수도 지원.
-
-## Tree
-
-`semble_rs tree`는 `search`와 동일한 gitignore 인지 인덱스를 사용해 코드베이스 파일 트리를 출력합니다. `ls -R`은 실제 프로젝트에서 `.git/`, `target/`, `node_modules/`까지 모두 포함해 토큰 수만에서 수십만으로 폭발하기 때문입니다. 실측:
-
-| 프로젝트 | `semble_rs tree` | `ls -R` | 압축률 |
-| --- | --- | --- | --- |
-| 이 저장소 (Rust + `target/`) | **533 B** | 398,101 B | **747×** |
-| 6,693 파일 Python 백엔드 | **3,950 B** | 254,066 B | **64×** |
-| 325 파일 ML 학습 저장소 | 838 B | 7,522 B | 9× |
-
-```bash
-semble_rs tree                              # 현재 디렉토리
-semble_rs tree -d                           # 디렉토리만
-semble_rs tree --max-depth 2                # 깊이 제한
-semble_rs tree --symbols                    # 파일별 top-level 심볼 동봉
-semble_rs tree --lang rust,python           # 언어 필터
-```
 
 ## Digest
 
@@ -194,7 +172,6 @@ semble_rs encode "x" --model minishlab/potion-multilingual-128M
 `ls -R`, `grep`, `cat` 대신 `semble_rs`를 사용:
 
 ​```bash
-semble_rs tree . --symbols                         # 코드베이스 지도 (저렴)
 semble_rs search "<feature or symbol>" . --outline # 1단계
 semble_rs search "<feature or symbol>" . --compact # 2단계
 semble_rs deps   <file> .                          # 파일이 import / 정의하는 것
@@ -272,9 +249,6 @@ Query 셋: `docs/eval_set_100.json` · 미스 분석: `docs/benchmark_100.md`.
 
 | 작업 | `semble_rs` | 네이티브 | 절감 |
 | --- | --- | --- | --- |
-| **코드베이스 지도** (이 저장소) | `tree` **533 B** | `ls -R` 398 KB | **747×** |
-| **코드베이스 지도** (6,693 파일 Python 백엔드) | `tree` **3,950 B** | `ls -R` 254 KB | **64×** |
-| **코드베이스 지도** (325 파일 Python 저장소) | `tree` 838 B | `ls -R` 7,522 B | 9× |
 | **코드 청크 조회** (`--outline` vs `--compact`) | \-47% | baseline | \-47% |
 | **빌드 로그** (`cargo build` clean) | `digest` 59 B | raw 7,611 B | **-99.2%** |
 | **CI 실패 로그** (실제 GitHub Actions, rust-lang/rust) | `digest` 35 KB | raw 3.3 MB | **-98.9%** ⭐ |
