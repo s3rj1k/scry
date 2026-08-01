@@ -12,7 +12,7 @@ use semble::plan::{build_plan, print_plan};
 use semble::stats::format_savings_report;
 use semble::tree::{render as render_tree, TreeOptions};
 use semble::types::SearchResult;
-use semble::utils::{format_results, is_git_url, resolve_chunk};
+use semble::utils::{format_results, resolve_chunk};
 
 #[derive(Parser)]
 #[command(
@@ -31,7 +31,7 @@ enum Commands {
     Search {
         /// Keyword, symbol, or function name to search for
         query: String,
-        /// Local path or git URL (default: current directory)
+        /// Local path (default: current directory)
         #[arg(default_value = ".")]
         path: String,
         /// Number of results
@@ -66,7 +66,7 @@ enum Commands {
         file_path: String,
         /// Line number (1-indexed)
         line: usize,
-        /// Local path or git URL (default: current directory)
+        /// Local path (default: current directory)
         #[arg(default_value = ".")]
         path: String,
         /// Number of results
@@ -126,7 +126,7 @@ enum Commands {
     Plan {
         /// Natural-language task or feature to investigate
         task: String,
-        /// Local path or git URL (default: current directory)
+        /// Local path (default: current directory)
         #[arg(default_value = ".")]
         path: String,
         /// Number of candidate chunks to use
@@ -150,7 +150,7 @@ enum Commands {
     },
     /// Print the codebase file tree (gitignore-aware, no `ls -R` token explosion)
     Tree {
-        /// Local path or git URL (default: current directory)
+        /// Local path (default: current directory)
         #[arg(default_value = ".")]
         path: String,
         /// Show directories only
@@ -708,13 +708,7 @@ fn build_index(path: &str, include_text_files: bool, model: Option<&str>) -> Sem
             process::exit(1);
         })
     });
-    let result = if is_git_url(path) {
-        SembleIndex::from_git(path, None, encoder, None, None, include_text_files)
-    } else {
-        SembleIndex::from_path(path, encoder, None, None, include_text_files)
-    };
-
-    match result {
+    match SembleIndex::from_path(path, encoder, None, None, include_text_files) {
         Ok(idx) => idx,
         Err(e) => {
             eprintln!("Error: {e:?}");

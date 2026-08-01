@@ -50,10 +50,9 @@ For agent integration (Claude Code, Codex, Cursor), see [Agent integration](#age
 ```bash
 semble_rs search "auth flow" ./my-project --outline    # pass 1: structural overview
 semble_rs search "loginWithEmail" ./my-project --compact   # pass 2: matching lines
-semble_rs search "save model" https://github.com/MinishLab/model2vec   # git URL
 ```
 
-`path` defaults to the current directory; git URLs are accepted (cloned shallow).
+`path` defaults to the current directory.
 
 ### Output modes
 

@@ -1,29 +1,4 @@
-use once_cell::sync::Lazy;
-use regex::Regex;
-
 use crate::types::{Chunk, SearchResult};
-
-static SCP_GIT_URL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\w.-]+@[\w.-]+:").unwrap());
-
-const GIT_URL_SCHEMES: &[&str] = &[
-    "https://",
-    "http://",
-    "ssh://",
-    "git://",
-    "git+ssh://",
-    "file://",
-];
-
-pub fn is_git_url(path: &str) -> bool {
-    if GIT_URL_SCHEMES.iter().any(|s| path.starts_with(s)) {
-        return true;
-    }
-    if let Some(mat) = SCP_GIT_URL_RE.find(path) {
-        let rest = &path[mat.end()..];
-        return !rest.starts_with('/');
-    }
-    false
-}
 
 pub fn resolve_chunk<'a>(chunks: &'a [Chunk], file_path: &str, line: usize) -> Option<&'a Chunk> {
     let mut fallback = None;

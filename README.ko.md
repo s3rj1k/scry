@@ -64,10 +64,9 @@ gh run view <id> --log-failed | semble_rs digest
 ```bash
 semble_rs search "인증 흐름" ./my-project --outline    # 1단계: 구조 스캔
 semble_rs search "loginWithEmail" ./my-project --compact   # 2단계: 매칭 라인
-semble_rs search "save model" https://github.com/MinishLab/model2vec   # git URL
 ```
 
-`path`는 생략 시 현재 디렉토리. git URL도 받음 (shallow clone).
+`path`는 생략 시 현재 디렉토리.
 
 ### 출력 모드
 

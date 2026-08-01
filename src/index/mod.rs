@@ -2,7 +2,6 @@ pub mod create;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
@@ -68,78 +67,6 @@ impl SembleIndex {
             semantic_index,
             chunks,
             root: Some(path),
-            file_sizes,
-            file_mapping,
-            language_mapping,
-            graph,
-        })
-    }
-
-    pub fn from_git(
-        url: &str,
-        ref_: Option<&str>,
-        encoder: Option<StaticEncoder>,
-        extensions: Option<&HashSet<String>>,
-        ignore: Option<&HashSet<String>>,
-        include_text_files: bool,
-    ) -> Result<Self> {
-        let tmp_dir = std::env::temp_dir().join(format!("semble-clone-{}", std::process::id()));
-        std::fs::create_dir_all(&tmp_dir)?;
-
-        let mut cmd = Command::new("git");
-        cmd.args(["clone", "--depth", "1"]);
-        if let Some(r) = ref_ {
-            cmd.args(["--branch", r]);
-        }
-        cmd.args(["--", url, &tmp_dir.to_string_lossy()]);
-        cmd.stdin(std::process::Stdio::null());
-        cmd.stdout(std::process::Stdio::null());
-        cmd.stderr(std::process::Stdio::piped());
-
-        let output = cmd.output().map_err(|e| {
-            let _ = std::fs::remove_dir_all(&tmp_dir);
-            anyhow::anyhow!("git is not installed or not on PATH: {e}")
-        })?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let _ = std::fs::remove_dir_all(&tmp_dir);
-            bail!("git clone failed for {url:?}:\n{}", stderr.trim());
-        }
-
-        let encoder = match encoder {
-            Some(e) => e,
-            None => StaticEncoder::load(None).context("Failed to load embedding model")?,
-        };
-
-        let resolved = tmp_dir.canonicalize().unwrap_or_else(|_| tmp_dir.clone());
-        let result = create_index_from_path(
-            &resolved,
-            &encoder,
-            extensions,
-            ignore,
-            include_text_files,
-            &resolved,
-        );
-
-        let (bm25_index, semantic_index, chunks, graph) = match result {
-            Ok(r) => r,
-            Err(e) => {
-                let _ = std::fs::remove_dir_all(&tmp_dir);
-                return Err(e);
-            }
-        };
-
-        let file_sizes = compute_file_sizes(&resolved, &chunks);
-        let (file_mapping, language_mapping) = build_mappings(&chunks);
-        let _ = std::fs::remove_dir_all(&tmp_dir);
-
-        Ok(Self {
-            encoder,
-            bm25_index,
-            semantic_index,
-            chunks,
-            root: None,
             file_sizes,
             file_mapping,
             language_mapping,
