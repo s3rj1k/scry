@@ -1,13 +1,9 @@
-use tree_sitter::{Language, Node, Parser};
+use text_splitter::{CodeSplitter, TextSplitter};
+use tree_sitter::Language;
 
 use crate::types::Chunk;
 
 const DESIRED_CHUNK_LENGTH_CHARS: usize = 1500;
-
-struct ChunkBoundary {
-    start: usize,
-    end: usize,
-}
 
 fn get_language(name: &str) -> Option<Language> {
     let lang_fn = match name {
@@ -28,258 +24,43 @@ fn get_language(name: &str) -> Option<Language> {
     Some(Language::from(lang_fn))
 }
 
-fn is_definition_node(language: &str, node: &Node) -> bool {
-    let kind = node.kind();
-    match language {
-        "rust" => matches!(
-            kind,
-            "function_item"
-                | "impl_item"
-                | "struct_item"
-                | "enum_item"
-                | "trait_item"
-                | "mod_item"
-                | "const_item"
-                | "static_item"
-                | "type_item"
-                | "macro_definition"
-                | "attribute_item"
-        ),
-        "python" => matches!(
-            kind,
-            "function_definition" | "class_definition" | "decorated_definition"
-        ),
-        "javascript" => matches!(
-            kind,
-            "function_declaration"
-                | "class_declaration"
-                | "export_statement"
-                | "lexical_declaration"
-                | "variable_declaration"
-        ),
-        "typescript" => matches!(
-            kind,
-            "function_declaration"
-                | "class_declaration"
-                | "interface_declaration"
-                | "type_alias_declaration"
-                | "enum_declaration"
-                | "export_statement"
-                | "lexical_declaration"
-                | "variable_declaration"
-        ),
-        "go" => matches!(
-            kind,
-            "function_declaration" | "method_declaration" | "type_declaration"
-        ),
-        "java" => matches!(
-            kind,
-            "class_declaration"
-                | "method_declaration"
-                | "interface_declaration"
-                | "enum_declaration"
-                | "constructor_declaration"
-                | "record_declaration"
-        ),
-        "c" => matches!(
-            kind,
-            "function_definition" | "struct_specifier" | "enum_specifier" | "declaration"
-        ),
-        "cpp" => matches!(
-            kind,
-            "function_definition"
-                | "class_specifier"
-                | "struct_specifier"
-                | "enum_specifier"
-                | "declaration"
-                | "namespace_definition"
-                | "template_declaration"
-        ),
-        "kotlin" => matches!(
-            kind,
-            "class_declaration"
-                | "object_declaration"
-                | "function_declaration"
-                | "property_declaration"
-                | "type_alias"
-                | "companion_object"
-                | "secondary_constructor"
-        ),
-        "ruby" => matches!(
-            kind,
-            "method"
-                | "singleton_method"
-                | "class"
-                | "module"
-                | "singleton_class"
-                | "assignment"
-        ),
-        "php" => matches!(
-            kind,
-            "function_definition"
-                | "method_declaration"
-                | "class_declaration"
-                | "interface_declaration"
-                | "trait_declaration"
-                | "enum_declaration"
-                | "namespace_definition"
-        ),
-        "swift" => matches!(
-            kind,
-            "function_declaration"
-                | "class_declaration"
-                | "protocol_declaration"
-                | "extension_declaration"
-                | "enum_declaration"
-                | "struct_declaration"
-                | "property_declaration"
-                | "typealias_declaration"
-        ),
-        _ => false,
-    }
+fn collect_indices<'a>(it: impl Iterator<Item = (usize, &'a str)>) -> Vec<(usize, String)> {
+    it.map(|(offset, text)| (offset, text.to_string())).collect()
 }
 
-fn chunk_with_tree_sitter(source: &str, language: &str) -> Option<Vec<ChunkBoundary>> {
-    let ts_lang = get_language(language)?;
-    let mut parser = Parser::new();
-    parser.set_language(&ts_lang).ok()?;
-    let tree = parser.parse(source, None)?;
-    let root = tree.root_node();
-
-    let mut def_starts: Vec<usize> = Vec::new();
-    let mut cursor = root.walk();
-
-    for child in root.children(&mut cursor) {
-        if is_definition_node(language, &child) {
-            def_starts.push(child.start_byte());
-        }
-    }
-
-    if def_starts.is_empty() {
-        return None;
-    }
-
-    let mut boundaries = Vec::new();
-
-    for (i, &start) in def_starts.iter().enumerate() {
-        let end = if i + 1 < def_starts.len() {
-            def_starts[i + 1]
-        } else {
-            source.len()
-        };
-
-        // For the first definition, include any leading content (imports, comments)
-        let actual_start = if i == 0 { 0 } else { start };
-
-        if actual_start < end {
-            boundaries.push(ChunkBoundary {
-                start: actual_start,
-                end,
-            });
-        }
-    }
-
-    if boundaries.is_empty() {
-        return None;
-    }
-
-    Some(merge_adjacent_chunks(
-        &boundaries,
-        DESIRED_CHUNK_LENGTH_CHARS,
-    ))
-}
-
-fn merge_adjacent_chunks(chunks: &[ChunkBoundary], desired_length: usize) -> Vec<ChunkBoundary> {
-    if chunks.is_empty() {
-        return Vec::new();
-    }
-
-    let mut merged = Vec::new();
-    let mut current_start = chunks[0].start;
-    let mut current_end = chunks[0].end;
-    let mut current_length = current_end - current_start;
-
-    for group in &chunks[1..] {
-        let length = group.end - group.start;
-
-        if current_length + length > desired_length {
-            merged.push(ChunkBoundary {
-                start: current_start,
-                end: current_end,
-            });
-            current_start = group.start;
-            current_end = group.end;
-            current_length = length;
-            continue;
-        }
-
-        current_end = group.end;
-        current_length += length;
-    }
-
-    merged.push(ChunkBoundary {
-        start: current_start,
-        end: current_end,
-    });
-
-    merged
-}
-
-fn chunk_lines(text: &str, desired_length: usize) -> Vec<ChunkBoundary> {
-    if text.trim().is_empty() {
-        return Vec::new();
-    }
-
-    let mut lines_as_groups = Vec::new();
-    let mut index = 0;
-    for line in text.split_inclusive('\n') {
-        lines_as_groups.push(ChunkBoundary {
-            start: index,
-            end: index + line.len(),
-        });
-        index += line.len();
-    }
-    if index < text.len() {
-        lines_as_groups.push(ChunkBoundary {
-            start: index,
-            end: text.len(),
-        });
-    }
-
-    merge_adjacent_chunks(&lines_as_groups, desired_length)
-}
-
+/// Split `source` into chunks capped near `DESIRED_CHUNK_LENGTH_CHARS`.
+///
+/// Files in a supported language are split at syntax boundaries via tree-sitter
+/// (`text-splitter`'s `CodeSplitter`); anything else — unknown language or a
+/// grammar that fails to load — falls back to semantic text splitting.
 pub fn chunk_source(source: &str, file_path: &str, language: Option<&str>) -> Vec<Chunk> {
     if source.trim().is_empty() {
         return Vec::new();
     }
 
-    let boundaries = language
-        .and_then(|lang| chunk_with_tree_sitter(source, lang))
-        .unwrap_or_else(|| chunk_lines(source, DESIRED_CHUNK_LENGTH_CHARS));
+    let indexed = language
+        .and_then(get_language)
+        .and_then(|lang| CodeSplitter::new(lang, DESIRED_CHUNK_LENGTH_CHARS).ok())
+        .map(|splitter| collect_indices(splitter.chunk_indices(source)))
+        .unwrap_or_else(|| {
+            collect_indices(TextSplitter::new(DESIRED_CHUNK_LENGTH_CHARS).chunk_indices(source))
+        });
 
-    let mut chunks = Vec::new();
-    for boundary in &boundaries {
-        let end_index = boundary.end.max(boundary.start);
-        let text = &source[boundary.start..end_index];
-
-        let start_line = source[..boundary.start].matches('\n').count() + 1;
-        let end_line = if end_index > 0 {
-            source[..end_index].matches('\n').count() + 1
-        } else {
-            1
-        };
-
-        chunks.push(Chunk::new(
-            text.to_string(),
-            file_path.to_string(),
-            start_line,
-            end_line,
-            language.map(String::from),
-        ));
-    }
-
-    chunks
+    indexed
+        .into_iter()
+        .map(|(offset, text)| {
+            let end = (offset + text.len()).min(source.len());
+            let start_line = source[..offset].matches('\n').count() + 1;
+            let end_line = source[..end].matches('\n').count() + 1;
+            Chunk::new(
+                text,
+                file_path.to_string(),
+                start_line,
+                end_line,
+                language.map(String::from),
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -319,6 +100,17 @@ struct MyStruct {
             "large source should split: got {} chunks",
             chunks.len()
         );
+    }
+
+    #[test]
+    fn test_chunks_have_valid_line_ranges() {
+        let source = "fn a() {}\nfn b() {}\nfn c() {}\n";
+        let chunks = chunk_source(source, "test.rs", Some("rust"));
+        assert!(!chunks.is_empty());
+        for c in &chunks {
+            assert!(c.start_line >= 1);
+            assert!(c.end_line >= c.start_line);
+        }
     }
 
     #[test]
@@ -417,22 +209,24 @@ typealias Name = String
     }
 
     #[test]
-    fn test_kotlin_tree_sitter_uses_definition_boundaries() {
+    fn test_large_source_splits_and_preserves_content() {
         let body = "    val x = 1\n".repeat(80);
         let source =
             format!("class A {{\n{body}}}\n\nclass B {{\n{body}}}\n\nclass C {{\n{body}}}\n");
         let chunks = chunk_source(&source, "Big.kt", Some("kotlin"));
         assert!(
-            chunks.len() >= 3,
-            "large kotlin source should split by class: got {} chunks",
+            chunks.len() >= 2,
+            "large source should split: got {} chunks",
             chunks.len()
         );
-        assert!(chunks[0].content.contains("class A"));
-        assert!(
-            !chunks[0].content.contains("class B"),
-            "first chunk should end at the next top-level definition"
-        );
-        assert!(chunks[1].content.trim_start().starts_with("class B"));
+        let all_content: String = chunks.iter().map(|c| c.content.as_str()).collect();
+        assert!(all_content.contains("class A"));
+        assert!(all_content.contains("class B"));
+        assert!(all_content.contains("class C"));
+        // The whole file should not collapse into a single chunk.
+        assert!(!chunks.iter().any(|c| c.content.contains("class A")
+            && c.content.contains("class B")
+            && c.content.contains("class C")));
     }
 
     #[test]
