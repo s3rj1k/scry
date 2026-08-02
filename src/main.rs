@@ -22,7 +22,7 @@ struct Cli {
 enum Commands {
     /// Search a codebase with keyword/symbol query
     Search {
-        /// Keyword, symbol, or function name to search for
+        /// Query text, or a file:line location when --related is set
         query: String,
         /// Local path, defaults to the current directory
         #[arg(default_value = ".")]
@@ -33,6 +33,9 @@ enum Commands {
         /// Also index non code text files like .md, .yaml, .json
         #[arg(long)]
         include_text_files: bool,
+        /// Treat the query as a file:line location and return similar chunks
+        #[arg(long)]
+        related: bool,
         /// Output as JSON (for agent/tool integration)
         #[arg(long)]
         json: bool,
@@ -44,28 +47,6 @@ enum Commands {
         group: bool,
         /// Embedding model (HF repo id or local path).
         /// Overrides SEMBLE_MODEL_PATH and the default embedding model.
-        #[arg(long)]
-        model: Option<String>,
-    },
-    /// Find code similar to a specific location
-    FindRelated {
-        /// File path as shown in search results
-        file_path: String,
-        /// Line number, starting at 1
-        line: usize,
-        /// Local path, defaults to the current directory
-        #[arg(default_value = ".")]
-        path: String,
-        /// Number of results
-        #[arg(short = 'k', long = "top-k", default_value = "10")]
-        top_k: usize,
-        /// Also index non code text files
-        #[arg(long)]
-        include_text_files: bool,
-        /// Output as JSON (for agent/tool integration)
-        #[arg(long)]
-        json: bool,
-        /// Embedding model (HF repo id or local path).
         #[arg(long)]
         model: Option<String>,
     },
@@ -81,6 +62,7 @@ fn main() {
             path,
             top_k,
             include_text_files,
+            related,
             json,
             compact,
             group,
@@ -88,7 +70,22 @@ fn main() {
         } => {
             let index = build_index(&path, include_text_files, model.as_deref());
 
-            let results = index.search(query.as_str(), top_k, None, None, None);
+            let results = if related {
+                let (file_path, line) = parse_location(&query).unwrap_or_else(|| {
+                    eprintln!("--related expects a file:line location, got {query:?}.");
+                    process::exit(1);
+                });
+                let chunk = resolve_chunk(index.chunks(), file_path, line)
+                    .unwrap_or_else(|| {
+                        eprintln!("No chunk found at {query}.");
+                        process::exit(1);
+                    })
+                    .clone();
+                index.find_related(&chunk, top_k)
+            } else {
+                index.search(query.as_str(), top_k, None, None, None)
+            };
+
             if group {
                 print_grouped(&results);
             } else if compact {
@@ -98,44 +95,22 @@ fn main() {
             } else if results.is_empty() {
                 println!("No results found.");
             } else {
-                println!(
-                    "{}",
-                    format_results(&format!("Search results for: {query:?}"), &results)
-                );
-            }
-        }
-        Commands::FindRelated {
-            file_path,
-            line,
-            path,
-            top_k,
-            include_text_files,
-            json,
-            model,
-        } => {
-            let index = build_index(&path, include_text_files, model.as_deref());
-
-            let chunk = match resolve_chunk(index.chunks(), &file_path, line) {
-                Some(c) => c.clone(),
-                None => {
-                    eprintln!("No chunk found at {file_path}:{line}.");
-                    process::exit(1);
-                }
-            };
-
-            let results = index.find_related(&chunk, top_k);
-            if json {
-                print_json(&results);
-            } else if results.is_empty() {
-                println!("No related chunks found for {file_path}:{line}.");
-            } else {
-                println!(
-                    "{}",
-                    format_results(&format!("Chunks related to {file_path}:{line}"), &results)
-                );
+                let header = if related {
+                    format!("Chunks related to {query}")
+                } else {
+                    format!("Search results for: {query:?}")
+                };
+                println!("{}", format_results(&header, &results));
             }
         }
     }
+}
+
+/// Parse a `file:line` location, tolerating a trailing line range like `10-20`.
+fn parse_location(loc: &str) -> Option<(&str, usize)> {
+    let (file, rest) = loc.rsplit_once(':')?;
+    let line: usize = rest.split('-').next()?.trim().parse().ok()?;
+    Some((file, line))
 }
 
 fn print_compact(results: &[SearchResult]) {
