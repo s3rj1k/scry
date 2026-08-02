@@ -34,22 +34,6 @@ pub fn weighted_rrf(signals: &[Signal], k: f64) -> HashMap<usize, f64> {
     fused
 }
 
-// adaptive semantic vs lexical weight
-
-pub const ALPHA_SYMBOL: f64 = 0.3;
-pub const ALPHA_NL: f64 = 0.5;
-
-pub fn resolve_alpha(query: &str, alpha: Option<f64>, alpha_symbol: f64, alpha_nl: f64) -> f64 {
-    if let Some(a) = alpha {
-        return a;
-    }
-    if is_symbol_query(query) {
-        alpha_symbol
-    } else {
-        alpha_nl
-    }
-}
-
 // definition signal
 
 static SYMBOL_QUERY_RE: Lazy<Regex> = Lazy::new(|| {

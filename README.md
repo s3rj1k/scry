@@ -1,13 +1,13 @@
 # Scry
 
-**Scry finds code by intent with hybrid semantic + lexical search, returning the exact file and line.**
+**Scry finds code by intent, returning the file and line range.**
 
 Single-binary code search for AI coding agents — returns the exact chunks, not whole files. No daemon, keys, or network. Hard fork of [semble_rs](https://github.com/johunsang/semble_rs), a Rust port of [MinishLab/semble](https://github.com/MinishLab/semble).
 
 ## How it works
 
-- **Hybrid** — BM25 + [Model2Vec](https://github.com/MinishLab/model2vec) embeddings, fused with RRF and a definition boost.
-- **AST aware** — [tree-sitter](https://tree-sitter.github.io/tree-sitter/) chunking and symbol extraction.
+- **Semantic** — [Model2Vec](https://github.com/MinishLab/model2vec) embeddings ranked by cosine similarity, with a definition boost fused via RRF.
+- **AST aware** — [tree-sitter](https://tree-sitter.github.io/tree-sitter/) structure-first chunking (whole functions and types) and symbol extraction.
 - **Local only** — static CPU embedder; models resolved locally, never downloaded.
 
 ## Install

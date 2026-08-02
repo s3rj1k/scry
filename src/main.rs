@@ -6,7 +6,6 @@ use scry::format::format_results;
 use scry::index::chunking::DESIRED_CHUNK_LENGTH_CHARS;
 use scry::index::encoder::StaticEncoder;
 use scry::index::{IndexParams, ScryIndex};
-use scry::search::ranking::{ALPHA_NL, ALPHA_SYMBOL};
 use scry::search::SearchParams;
 use scry::types::SearchResult;
 
@@ -14,7 +13,7 @@ use scry::types::SearchResult;
 #[command(
     name = "scry",
     version = env!("SCRY_VERSION"),
-    about = "Scry finds code by intent with hybrid semantic + lexical search, returning the exact file and line."
+    about = "Scry finds code by intent, returning the file and line range."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -36,16 +35,6 @@ enum Commands {
         /// Also index non code text files like .md, .yaml, .json
         #[arg(long)]
         include_text_files: bool,
-        /// Semantic weight from 0.0 (lexical only) to 1.0 (semantic only).
-        /// Omitted, it adapts to the query shape.
-        #[arg(long)]
-        alpha: Option<f64>,
-        /// Adaptive semantic weight for symbol shaped queries when alpha is unset
-        #[arg(long, default_value_t = ALPHA_SYMBOL)]
-        alpha_symbol: f64,
-        /// Adaptive semantic weight for natural language queries when alpha is unset
-        #[arg(long, default_value_t = ALPHA_NL)]
-        alpha_nl: f64,
         /// Reciprocal rank fusion constant
         #[arg(long, default_value_t = 60.0)]
         rrf_k: f64,
@@ -64,12 +53,6 @@ enum Commands {
         /// Skip files larger than this many bytes at index time
         #[arg(long, default_value_t = 1_000_000)]
         max_file_bytes: u64,
-        /// Repeat the file stem this many times in each BM25 document
-        #[arg(long, default_value_t = 2)]
-        bm25_stem_repeat: usize,
-        /// Trailing directory names added to each BM25 document
-        #[arg(long, default_value_t = 3)]
-        bm25_dir_parts: usize,
         /// Output as JSON (for agent/tool integration)
         #[arg(long)]
         json: bool,
@@ -99,29 +82,18 @@ fn main() {
             path,
             top_k,
             include_text_files,
-            alpha,
-            alpha_symbol,
-            alpha_nl,
             rrf_k,
             min_score_ratio,
             def_weight,
             candidates,
             chunk_size,
             max_file_bytes,
-            bm25_stem_repeat,
-            bm25_dir_parts,
             json,
             compact,
             group,
             max_match_lines,
             model,
         } => {
-            if let Some(a) = alpha {
-                if !(0.0..=1.0).contains(&a) {
-                    eprintln!("--alpha must be between 0.0 and 1.0, got {a}.");
-                    process::exit(1);
-                }
-            }
             if candidates == 0 {
                 eprintln!("--candidates must be at least 1.");
                 process::exit(1);
@@ -133,13 +105,8 @@ fn main() {
             let index_params = IndexParams {
                 chunk_size,
                 max_file_bytes,
-                bm25_stem_repeat,
-                bm25_dir_parts,
             };
             let search_params = SearchParams {
-                alpha,
-                alpha_symbol,
-                alpha_nl,
                 rrf_k,
                 min_score_ratio,
                 def_weight,

@@ -2,7 +2,7 @@
 name = "scry"
 version = "0.0.0"
 edition = "2021"
-description = "Scry finds code by intent with hybrid semantic + lexical search, returning the exact file and line."
+description = "Scry finds code by intent, returning the file and line range."
 license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/s3rj1k/scry"
@@ -48,5 +48,4 @@ tree-sitter-php = "0.24"
 tree-sitter-swift = "0.7"
 model2vec-rs = "0.2.1"
 text-splitter = { version = "0.32", features = ["code"] }
-bm25 = { version = "2", default-features = false }
 tree-sitter-tags = "0.26.11"

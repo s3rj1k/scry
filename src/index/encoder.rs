@@ -11,8 +11,7 @@ pub struct StaticEncoder {
 
 impl StaticEncoder {
     /// Load the embedding model named by `model`, a Hugging Face repo id or a
-    /// local path. The name is resolved to a local directory and never fetched
-    /// from the network; a model that is not present locally is a hard error.
+    /// local path resolved locally. A model absent locally is a hard error.
     pub fn load(model: &str) -> Result<Self> {
         let dir = resolve_local_model(model)?;
         let model = StaticModel::from_pretrained(&dir, None, None, None)
@@ -41,12 +40,10 @@ impl StaticEncoder {
     }
 }
 
-/// Resolve `name_or_path` to a local model directory without any network
-/// access. Search order is an explicit local directory, then `SCRY_MODEL_PATH`,
-/// then the Hugging Face hub cache. Errors list where it looked when nothing
-/// matches.
+/// Resolve `name_or_path` to a local model directory without any network access.
+/// It searches a local directory, then `SCRY_MODEL_PATH`, then the HF hub cache.
 fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
-    // A directory the caller points at directly wins; the loader validates it.
+    // A directory the caller points at directly wins and the loader validates it.
     if Path::new(name_or_path).is_dir() {
         return Ok(PathBuf::from(name_or_path));
     }
@@ -60,7 +57,7 @@ fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
         searched.push(dir);
     }
 
-    // Hugging Face hub cache: models--{org}--{name}/snapshots/{commit}/.
+    // Hugging Face hub cache path built from the repo id and a snapshot commit.
     let hub_dir = format!("models--{}", name_or_path.replace('/', "--"));
     for root in hf_cache_roots() {
         let repo = root.join(&hub_dir);
