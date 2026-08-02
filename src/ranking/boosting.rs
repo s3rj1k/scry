@@ -32,53 +32,6 @@ static EMBEDDED_SYMBOL_RE: Lazy<Regex> = Lazy::new(|| {
 const EMBEDDED_STEM_MIN_LEN: usize = 4;
 const EMBEDDED_SYMBOL_BOOST_SCALE: f64 = 0.5;
 
-const DEFINITION_KEYWORDS: &[&str] = &[
-    "class",
-    "module",
-    "defmodule",
-    "def",
-    "interface",
-    "struct",
-    "enum",
-    "trait",
-    "type",
-    "func",
-    "function",
-    "object",
-    "abstract class",
-    "data class",
-    "fn",
-    "fun",
-    "package",
-    "namespace",
-    "protocol",
-    "record",
-    "typedef",
-];
-
-const SQL_DEFINITION_KEYWORDS: &[&str] = &[
-    "CREATE TABLE",
-    "CREATE VIEW",
-    "CREATE PROCEDURE",
-    "CREATE FUNCTION",
-];
-
-static DEFINITION_KEYWORD_BODY: Lazy<String> = Lazy::new(|| {
-    DEFINITION_KEYWORDS
-        .iter()
-        .map(|kw| regex::escape(kw))
-        .collect::<Vec<_>>()
-        .join("|")
-});
-
-static SQL_KEYWORD_BODY: Lazy<String> = Lazy::new(|| {
-    SQL_DEFINITION_KEYWORDS
-        .iter()
-        .map(|kw| regex::escape(kw))
-        .collect::<Vec<_>>()
-        .join("|")
-});
-
 const DEFINITION_BOOST_MULTIPLIER: f64 = 3.0;
 const STEM_BOOST_MULTIPLIER: f64 = 1.0;
 const FILE_COHERENCE_BOOST_FRAC: f64 = 0.2;
@@ -149,16 +102,10 @@ fn extract_symbol_name(query: &str) -> &str {
     q
 }
 
+/// Whether this chunk defines a symbol with the given name, using the AST
+/// symbols attached at index time (see `index::create`).
 fn chunk_defines_symbol(chunk: &Chunk, symbol_name: &str) -> bool {
-    let escaped = regex::escape(symbol_name);
-    let ns_prefix = r"(?:[A-Za-z_][A-Za-z0-9_]*(?:\.|::))*";
-    let tail = format!(r"\s+{ns_prefix}{escaped}(?:\s|[<({{\[;:]|$)");
-
-    let general = format!(r"(?m)(?:^|\s)(?:{}){tail}", &*DEFINITION_KEYWORD_BODY);
-    let sql = format!(r"(?mi)(?:^|\s)(?:{}){tail}", &*SQL_KEYWORD_BODY);
-
-    Regex::new(&general).is_ok_and(|re| re.is_match(&chunk.content))
-        || Regex::new(&sql).is_ok_and(|re| re.is_match(&chunk.content))
+    chunk.symbols.iter().any(|s| s == symbol_name)
 }
 
 fn stem_matches(stem: &str, name: &str) -> bool {

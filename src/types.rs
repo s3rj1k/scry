@@ -7,6 +7,10 @@ pub struct Chunk {
     pub start_line: usize,
     pub end_line: usize,
     pub language: Option<String>,
+    /// Names of the symbols this chunk defines, taken from the AST (populated
+    /// at index time from the dependency graph). Not serialized.
+    #[serde(skip)]
+    pub symbols: Vec<String>,
 }
 
 impl Chunk {
@@ -23,6 +27,7 @@ impl Chunk {
             start_line,
             end_line,
             language,
+            symbols: Vec::new(),
         }
     }
 

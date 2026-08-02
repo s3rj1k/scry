@@ -86,6 +86,19 @@ pub fn create_index_from_path(
 
     graph.resolve_dependencies();
 
+    // Attach the AST symbols each chunk defines (from the dependency graph),
+    // so ranking can detect definitions structurally instead of via regex.
+    for chunk in &mut chunks {
+        if let Some(node) = graph.deps(&chunk.file_path) {
+            chunk.symbols = node
+                .symbols
+                .iter()
+                .filter(|s| s.line >= chunk.start_line && s.line <= chunk.end_line)
+                .map(|s| s.name.clone())
+                .collect();
+        }
+    }
+
     let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
     let embeddings = encoder
         .encode_batch(&texts)
