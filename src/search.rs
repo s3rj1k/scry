@@ -4,7 +4,6 @@ use crate::bm25::Bm25Index;
 use crate::encoder::{SemanticIndex, StaticEncoder};
 use crate::graph::DependencyGraph;
 use crate::ranking::{apply_query_boost, boost_multi_chunk_files, rerank_topk, resolve_alpha};
-use crate::tokens::tokenize;
 use crate::types::{Chunk, MatchLine, SearchResult};
 
 const RRF_K: f64 = 60.0;
@@ -157,12 +156,11 @@ pub fn search_bm25(
     top_k: usize,
     selector: Option<&[usize]>,
 ) -> Vec<SearchResult> {
-    let tokens = tokenize(query);
-    if tokens.is_empty() {
+    if query.trim().is_empty() {
         return Vec::new();
     }
     let mask = selector_to_mask(selector, chunks.len());
-    let scores = bm25_index.get_scores(&tokens, mask.as_deref());
+    let scores = bm25_index.get_scores(query, mask.as_deref());
 
     let mut indexed: Vec<(usize, f64)> = scores
         .iter()
@@ -215,10 +213,9 @@ pub fn search_hybrid(
         .map(|&(idx, dist)| (idx, (1.0 - dist) as f64))
         .collect();
 
-    let tokens = tokenize(query);
-    let bm25_scores: HashMap<usize, f64> = if !tokens.is_empty() {
+    let bm25_scores: HashMap<usize, f64> = if !query.trim().is_empty() {
         let mask = selector_to_mask(selector, chunks.len());
-        let raw_scores = bm25_index.get_scores(&tokens, mask.as_deref());
+        let raw_scores = bm25_index.get_scores(query, mask.as_deref());
         let mut indexed: Vec<(usize, f64)> = raw_scores
             .iter()
             .enumerate()

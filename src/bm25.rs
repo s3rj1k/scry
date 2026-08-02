@@ -1,91 +1,73 @@
-use std::collections::HashMap;
+use bm25::{Embedder, EmbedderBuilder, Scorer, Tokenizer};
 
+use crate::tokens::tokenize;
+
+/// Adapts semble's code-aware tokenizer (camelCase / snake_case splitting) to
+/// the `bm25` crate, so BM25 indexes the same tokens as the rest of the engine.
+#[derive(Default, Clone)]
+struct SembleTokenizer;
+
+impl Tokenizer for SembleTokenizer {
+    fn tokenize(&self, input_text: &str) -> Vec<String> {
+        tokenize(input_text)
+    }
+}
+
+/// In-memory BM25 index backed by the `bm25` crate. Document ids are chunk
+/// indices, so scores align with the semantic index and the chunk array.
 pub struct Bm25Index {
-    postings: HashMap<String, Vec<(usize, f32)>>,
-    idf: HashMap<String, f64>,
-    doc_lengths: Vec<f32>,
-    avg_dl: f32,
+    embedder: Embedder<u32, SembleTokenizer>,
+    scorer: Scorer<usize, u32>,
     num_docs: usize,
-    k1: f32,
-    b: f32,
 }
 
 impl Bm25Index {
-    pub fn new(documents: &[Vec<String>]) -> Self {
-        let num_docs = documents.len();
-        let mut postings: HashMap<String, Vec<(usize, f32)>> = HashMap::new();
-        let mut doc_lengths = Vec::with_capacity(num_docs);
-        let mut df: HashMap<String, usize> = HashMap::new();
-
-        for (doc_id, tokens) in documents.iter().enumerate() {
-            doc_lengths.push(tokens.len() as f32);
-
-            let mut tf: HashMap<&str, f32> = HashMap::new();
-            for token in tokens {
-                *tf.entry(token.as_str()).or_default() += 1.0;
-            }
-
-            for (term, freq) in tf {
-                postings
-                    .entry(term.to_string())
-                    .or_default()
-                    .push((doc_id, freq));
-                *df.entry(term.to_string()).or_default() += 1;
-            }
-        }
-
-        let avg_dl = if num_docs > 0 {
-            doc_lengths.iter().sum::<f32>() / num_docs as f32
+    /// Build the index from raw (untokenized) document texts; the embedder
+    /// tokenizes them via [`SembleTokenizer`].
+    pub fn new(documents: &[String]) -> Self {
+        let avgdl = if documents.is_empty() {
+            1.0
         } else {
-            0.0
+            let total: usize = documents.iter().map(|d| tokenize(d).len()).sum();
+            (total as f32 / documents.len() as f32).max(1.0)
         };
 
-        let idf: HashMap<String, f64> = df
-            .iter()
-            .map(|(term, &doc_freq)| {
-                let n = num_docs as f64;
-                let df = doc_freq as f64;
-                let idf_val = ((n - df + 0.5) / (df + 0.5) + 1.0).ln();
-                (term.clone(), idf_val)
-            })
-            .collect();
+        let embedder = EmbedderBuilder::<u32, SembleTokenizer>::with_avgdl(avgdl)
+            .tokenizer(SembleTokenizer)
+            .build();
+
+        let mut scorer = Scorer::<usize, u32>::new();
+        for (doc_id, doc) in documents.iter().enumerate() {
+            scorer.upsert(&doc_id, embedder.embed(doc.as_str()));
+        }
 
         Self {
-            postings,
-            idf,
-            doc_lengths,
-            avg_dl,
-            num_docs,
-            k1: 1.5,
-            b: 0.75,
+            embedder,
+            scorer,
+            num_docs: documents.len(),
         }
     }
 
-    pub fn get_scores(&self, query_tokens: &[String], weight_mask: Option<&[bool]>) -> Vec<f32> {
+    /// Dense BM25 scores indexed by document id (chunk index). `weight_mask`,
+    /// when set, restricts scoring to a subset of documents (language / path
+    /// filter); masked-out documents keep a score of 0.
+    pub fn get_scores(&self, query: &str, weight_mask: Option<&[bool]>) -> Vec<f32> {
         let mut scores = vec![0.0f32; self.num_docs];
-
-        for token in query_tokens {
-            let idf = match self.idf.get(token.as_str()) {
-                Some(&v) => v as f32,
-                None => continue,
-            };
-
-            if let Some(posting_list) = self.postings.get(token.as_str()) {
-                for &(doc_id, tf) in posting_list {
-                    if let Some(mask) = weight_mask {
-                        if doc_id >= mask.len() || !mask[doc_id] {
-                            continue;
-                        }
-                    }
-
-                    let dl = self.doc_lengths[doc_id];
-                    let tf_component = (tf * (self.k1 + 1.0))
-                        / (tf + self.k1 * (1.0 - self.b + self.b * dl / self.avg_dl));
-                    scores[doc_id] += idf * tf_component;
+        if query.trim().is_empty() {
+            return scores;
+        }
+        let query_embedding = self.embedder.embed(query);
+        for scored in self.scorer.matches(&query_embedding) {
+            let id = scored.id;
+            if let Some(mask) = weight_mask {
+                if id >= mask.len() || !mask[id] {
+                    continue;
                 }
             }
+            if id < scores.len() {
+                scores[id] = scored.score;
+            }
         }
-
         scores
     }
 

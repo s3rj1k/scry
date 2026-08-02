@@ -8,7 +8,6 @@ use crate::chunking::chunk_source;
 use crate::encoder::{SemanticIndex, StaticEncoder};
 use crate::file_walker::{filter_extensions, language_for_path, walk_files};
 use crate::graph::DependencyGraph;
-use crate::tokens::tokenize;
 use crate::types::Chunk;
 
 const MAX_FILE_BYTES: u64 = 1_000_000;
@@ -93,10 +92,7 @@ pub fn create_index_from_path(
         .context("Failed to encode chunks")?;
     let semantic_index = SemanticIndex::new(embeddings);
 
-    let bm25_docs: Vec<Vec<String>> = chunks
-        .iter()
-        .map(|chunk| tokenize(&enrich_for_bm25(chunk)))
-        .collect();
+    let bm25_docs: Vec<String> = chunks.iter().map(enrich_for_bm25).collect();
     let bm25_index = Bm25Index::new(&bm25_docs);
 
     Ok((bm25_index, semantic_index, chunks, graph))
