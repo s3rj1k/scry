@@ -25,7 +25,8 @@ fn get_language(name: &str) -> Option<Language> {
 }
 
 fn collect_indices<'a>(it: impl Iterator<Item = (usize, &'a str)>) -> Vec<(usize, String)> {
-    it.map(|(offset, text)| (offset, text.to_string())).collect()
+    it.map(|(offset, text)| (offset, text.to_string()))
+        .collect()
 }
 
 /// Split `source` into chunks capped near `DESIRED_CHUNK_LENGTH_CHARS`.

@@ -12,16 +12,47 @@ const REEXPORT_FILENAMES: &[&str] = &["__init__.py", "package-info.java"];
 const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "testing"];
 const COMPAT_DIRS: &[&str] = &["compat", "_compat", "legacy"];
 const EXAMPLE_DIRS: &[&str] = &[
-    "example", "examples", "_example", "_examples", "doc_src", "docs_src",
+    "example",
+    "examples",
+    "_example",
+    "_examples",
+    "doc_src",
+    "docs_src",
 ];
 
 // File-name markers of test files, across languages.
 const TEST_FILE_SUFFIXES: &[&str] = &[
-    "_test.py", "_test.go", "_test.rb", "_test.cpp", "_test.c", "_test.dart", "_test.lua",
-    "Test.java", "Tests.java", "Test.php", "Test.kt", "Tests.kt", "Spec.kt", "Test.swift",
-    "Tests.swift", "Spec.swift", "Test.cs", "Tests.cs", "Spec.scala", "Suite.scala", "Test.scala",
-    ".test.js", ".test.jsx", ".test.ts", ".test.tsx", ".spec.js", ".spec.jsx", ".spec.ts",
-    ".spec.tsx", "_spec.rb", "_spec.lua",
+    "_test.py",
+    "_test.go",
+    "_test.rb",
+    "_test.cpp",
+    "_test.c",
+    "_test.dart",
+    "_test.lua",
+    "Test.java",
+    "Tests.java",
+    "Test.php",
+    "Test.kt",
+    "Tests.kt",
+    "Spec.kt",
+    "Test.swift",
+    "Tests.swift",
+    "Spec.swift",
+    "Test.cs",
+    "Tests.cs",
+    "Spec.scala",
+    "Suite.scala",
+    "Test.scala",
+    ".test.js",
+    ".test.jsx",
+    ".test.ts",
+    ".test.tsx",
+    ".spec.js",
+    ".spec.jsx",
+    ".spec.ts",
+    ".spec.tsx",
+    "_spec.rb",
+    "_spec.lua",
 ];
 // `test_*.<ext>` prefixed test files.
 const TEST_PREFIX_EXTS: &[&str] = &[".py", ".cpp", ".c", ".dart", ".lua"];

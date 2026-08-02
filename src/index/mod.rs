@@ -85,7 +85,7 @@ impl SembleIndex {
         let selector = self.get_selector(filter_languages, filter_paths);
         let selector_ref = selector.as_deref();
 
-        let results = search_hybrid(
+        search_hybrid(
             query,
             &self.encoder,
             &self.semantic_index,
@@ -95,9 +95,7 @@ impl SembleIndex {
             alpha,
             selector_ref,
             Some(&self.graph),
-        );
-
-        results
+        )
     }
 
     pub fn find_related(&self, source: &Chunk, top_k: usize) -> Vec<SearchResult> {

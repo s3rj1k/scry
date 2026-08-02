@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use tree_sitter::{Language, Node, Parser};
@@ -38,19 +38,6 @@ pub struct FileNode {
     pub package_name: Option<String>,
     #[serde(skip)]
     pub source: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct OrphanFile {
-    pub file_path: String,
-    pub symbols: Vec<Symbol>,
-    pub depends_on: Vec<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct UnusedSymbol {
-    pub file_path: String,
-    pub symbol: Symbol,
 }
 
 #[derive(Debug, Default, serde::Serialize)]
@@ -157,165 +144,6 @@ impl DependencyGraph {
             .get(file_path)
             .map(|v| v.iter().map(|s| s.as_str()).collect())
             .unwrap_or_default()
-    }
-
-    pub fn impact(&self, file_path: &str) -> Vec<String> {
-        let mut visited = HashSet::new();
-        let mut queue = VecDeque::new();
-        queue.push_back(file_path.to_string());
-        visited.insert(file_path.to_string());
-
-        while let Some(current) = queue.pop_front() {
-            if let Some(deps) = self.reverse.get(&current) {
-                for dep in deps {
-                    if visited.insert(dep.clone()) {
-                        queue.push_back(dep.clone());
-                    }
-                }
-            }
-        }
-
-        visited.remove(file_path);
-        let mut result: Vec<String> = visited.into_iter().collect();
-        result.sort();
-        result
-    }
-
-    /// Emit `deps` as a Graphviz DOT graph: the file and its direct importers + direct
-    /// imports. Pipe into `dot -Tpng > graph.png` for a rendered image.
-    pub fn deps_dot(&self, file_path: &str) -> String {
-        let mut edges: Vec<(String, String)> = Vec::new();
-        if let Some(node) = self.files.get(file_path) {
-            for dep in &node.depends_on {
-                edges.push((file_path.to_string(), dep.clone()));
-            }
-        }
-        for importer in self.dependents(file_path) {
-            edges.push((importer.to_string(), file_path.to_string()));
-        }
-        emit_dot(&format!("deps:{file_path}"), &edges, &[file_path])
-    }
-
-    /// Emit `impact` as a DOT graph: the file + every transitive dependent.
-    pub fn impact_dot(&self, file_path: &str) -> String {
-        let affected = self.impact(file_path);
-        let mut edges: Vec<(String, String)> = Vec::new();
-        let mut seen: HashSet<String> = HashSet::new();
-        seen.insert(file_path.to_string());
-        for f in &affected {
-            seen.insert(f.clone());
-        }
-
-        let mut queue: VecDeque<String> = VecDeque::new();
-        queue.push_back(file_path.to_string());
-        let mut visited: HashSet<String> = HashSet::new();
-        visited.insert(file_path.to_string());
-        while let Some(current) = queue.pop_front() {
-            if let Some(deps) = self.reverse.get(&current) {
-                for dep in deps {
-                    if seen.contains(dep) {
-                        edges.push((dep.clone(), current.clone()));
-                        if visited.insert(dep.clone()) {
-                            queue.push_back(dep.clone());
-                        }
-                    }
-                }
-            }
-        }
-        emit_dot(&format!("impact:{file_path}"), &edges, &[file_path])
-    }
-
-    /// All files known to the graph (sorted).
-    pub fn all_files(&self) -> Vec<String> {
-        let mut v: Vec<String> = self.files.keys().cloned().collect();
-        v.sort();
-        v
-    }
-
-    pub fn orphans(&self) -> Vec<OrphanFile> {
-        let mut results = Vec::new();
-        for (fp, node) in &self.files {
-            if is_entry_point(fp) {
-                continue;
-            }
-            let dep_count = self.reverse.get(fp).map(|v| v.len()).unwrap_or(0);
-            if dep_count == 0 {
-                results.push(OrphanFile {
-                    file_path: fp.clone(),
-                    symbols: node.symbols.clone(),
-                    depends_on: node.depends_on.clone(),
-                });
-            }
-        }
-        results.sort_by(|a, b| a.file_path.cmp(&b.file_path));
-        results
-    }
-
-    pub fn unused_symbols(&self) -> Vec<UnusedSymbol> {
-        let mut defined: HashMap<String, Vec<(String, Symbol)>> = HashMap::new();
-        for (fp, node) in &self.files {
-            for sym in &node.symbols {
-                defined
-                    .entry(sym.name.clone())
-                    .or_default()
-                    .push((fp.clone(), sym.clone()));
-            }
-        }
-
-        let mut imported_names: HashSet<String> = HashSet::new();
-        for node in self.files.values() {
-            for imp in &node.raw_imports {
-                if let Some(last) = imp.rsplit(&[':', '.', '/', '\\']).next() {
-                    imported_names.insert(last.to_string());
-                    let lower = last.to_lowercase();
-                    if lower != *last {
-                        imported_names.insert(lower);
-                    }
-                }
-                imported_names.insert(imp.clone());
-            }
-        }
-
-        let mut results = Vec::new();
-        for (name, locations) in &defined {
-            if name == "main" || name == "new" || name == "default" || name == "lib" {
-                continue;
-            }
-            let referenced =
-                imported_names.contains(name) || imported_names.contains(&name.to_lowercase());
-            if !referenced && locations.len() == 1 {
-                let (fp, sym) = &locations[0];
-                if is_entry_point(fp) {
-                    continue;
-                }
-                if let Some(node) = self.files.get(fp) {
-                    if symbol_used_in_source(&node.source, name, sym.line) {
-                        continue;
-                    }
-                }
-                let dep_count = self.reverse.get(fp).map(|v| v.len()).unwrap_or(0);
-                if dep_count == 0 {
-                    results.push(UnusedSymbol {
-                        file_path: fp.clone(),
-                        symbol: sym.clone(),
-                    });
-                }
-            }
-        }
-        results.sort_by(|a, b| {
-            a.file_path
-                .cmp(&b.file_path)
-                .then(a.symbol.line.cmp(&b.symbol.line))
-        });
-        results
-    }
-
-    pub fn file_count(&self) -> usize {
-        self.files.len()
-    }
-
-    pub fn edge_count(&self) -> usize {
-        self.files.values().map(|n| n.depends_on.len()).sum()
     }
 }
 
@@ -520,11 +348,9 @@ fn extract_imports(source: &str, language: &str, root: &Node) -> Vec<String> {
                         imports.push(text);
                     }
                 }
-                "mod_item" => {
-                    if child.child_by_field_name("body").is_none() {
-                        if let Some(name) = find_child_text(source, &child, "name") {
-                            imports.push(format!("mod:{name}"));
-                        }
+                "mod_item" if child.child_by_field_name("body").is_none() => {
+                    if let Some(name) = find_child_text(source, &child, "name") {
+                        imports.push(format!("mod:{name}"));
                     }
                 }
                 _ => {}
@@ -609,17 +435,15 @@ fn extract_imports(source: &str, language: &str, root: &Node) -> Vec<String> {
                 }
                 _ => {}
             },
-            "swift" => {
-                if child.kind() == "import_declaration" {
-                    let text = node_text(source, &child);
-                    let cleaned = text
-                        .trim_start_matches("import")
-                        .trim()
-                        .trim_end_matches(';')
-                        .trim();
-                    if !cleaned.is_empty() {
-                        imports.push(cleaned.to_string());
-                    }
+            "swift" if child.kind() == "import_declaration" => {
+                let text = node_text(source, &child);
+                let cleaned = text
+                    .trim_start_matches("import")
+                    .trim()
+                    .trim_end_matches(';')
+                    .trim();
+                if !cleaned.is_empty() {
+                    imports.push(cleaned.to_string());
                 }
             }
             _ => {}
@@ -653,10 +477,8 @@ fn extract_php_use(source: &str, node: &Node, imports: &mut Vec<String>) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "namespace_use_clause" {
-            if let Some(name) =
-                find_child_by_kind(source, &child, "qualified_name").or_else(|| {
-                    find_child_by_kind(source, &child, "name")
-                })
+            if let Some(name) = find_child_by_kind(source, &child, "qualified_name")
+                .or_else(|| find_child_by_kind(source, &child, "name"))
             {
                 imports.push(name);
             }
@@ -806,55 +628,6 @@ fn find_declarator_name(source: &str, node: &Node) -> Option<String> {
 
 fn node_text(source: &str, node: &Node) -> String {
     source[node.byte_range()].to_string()
-}
-
-const ENTRY_POINT_NAMES: &[&str] = &[
-    "main.rs",
-    "lib.rs",
-    "mod.rs",
-    "main.ts",
-    "main.tsx",
-    "main.js",
-    "main.jsx",
-    "index.ts",
-    "index.tsx",
-    "index.js",
-    "index.jsx",
-    "App.tsx",
-    "App.ts",
-    "App.js",
-    "App.jsx",
-    "app.tsx",
-    "app.ts",
-    "app.js",
-    "app.jsx",
-    "main.go",
-    "main.py",
-    "main.java",
-    "__init__.py",
-    "main.c",
-    "main.cpp",
-];
-
-fn symbol_used_in_source(source: &str, name: &str, def_line: usize) -> bool {
-    for (i, line) in source.lines().enumerate() {
-        let line_num = i + 1;
-        if line_num == def_line {
-            continue;
-        }
-        if line.contains(name) {
-            return true;
-        }
-    }
-    false
-}
-
-fn is_entry_point(file_path: &str) -> bool {
-    let name = Path::new(file_path)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
-    ENTRY_POINT_NAMES.contains(&name)
 }
 
 fn build_stem_index(paths: &[String]) -> HashMap<String, Vec<String>> {
@@ -1139,43 +912,6 @@ fn common_prefix_len(a: &str, b: &str) -> usize {
     a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count()
 }
 
-/// Emit a Graphviz DOT graph from a list of edges + a set of "highlighted"
-/// nodes (drawn bold/filled).
-fn emit_dot(title: &str, edges: &[(String, String)], highlight: &[&str]) -> String {
-    let mut nodes: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for (a, b) in edges {
-        nodes.insert(a.clone());
-        nodes.insert(b.clone());
-    }
-    let mut out = String::new();
-    out.push_str(&format!(
-        "digraph \"{}\" {{\n",
-        title.replace('"', "\\\"")
-    ));
-    out.push_str("  rankdir=LR;\n");
-    out.push_str("  node [shape=box, fontname=\"Helvetica\"];\n");
-    let hi: std::collections::HashSet<&str> = highlight.iter().copied().collect();
-    for n in &nodes {
-        let esc = n.replace('"', "\\\"");
-        if hi.contains(n.as_str()) {
-            out.push_str(&format!(
-                "  \"{esc}\" [style=filled, fillcolor=\"#ffeaa7\", penwidth=2];\n"
-            ));
-        } else {
-            out.push_str(&format!("  \"{esc}\";\n"));
-        }
-    }
-    for (a, b) in edges {
-        out.push_str(&format!(
-            "  \"{}\" -> \"{}\";\n",
-            a.replace('"', "\\\""),
-            b.replace('"', "\\\"")
-        ));
-    }
-    out.push_str("}\n");
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1225,46 +961,6 @@ def main():
         assert_eq!(node.symbols[0].name, "FileWalker");
         assert_eq!(node.symbols[1].name, "main");
         assert!(node.raw_imports.len() >= 2);
-    }
-
-    #[test]
-    fn test_impact_analysis() {
-        let mut graph = DependencyGraph::new();
-        graph.files.insert(
-            "a.rs".to_string(),
-            FileNode {
-                symbols: vec![],
-                raw_imports: vec![],
-                depends_on: vec!["b.rs".to_string()],
-                package_name: None,
-                source: String::new(),
-            },
-        );
-        graph.files.insert(
-            "b.rs".to_string(),
-            FileNode {
-                symbols: vec![],
-                raw_imports: vec![],
-                depends_on: vec!["c.rs".to_string()],
-                package_name: None,
-                source: String::new(),
-            },
-        );
-        graph.files.insert(
-            "c.rs".to_string(),
-            FileNode {
-                symbols: vec![],
-                raw_imports: vec![],
-                depends_on: vec![],
-                package_name: None,
-                source: String::new(),
-            },
-        );
-        graph.build_reverse_index();
-
-        let impact = graph.impact("c.rs");
-        assert!(impact.contains(&"b.rs".to_string()));
-        assert!(impact.contains(&"a.rs".to_string()));
     }
 
     #[test]
@@ -1424,10 +1120,10 @@ typealias UserName = String
             vec!["src/main/kotlin/com/example/data/UserRepository.kt".to_string()]
         );
 
-        let impact = graph.impact("src/main/kotlin/com/example/data/UserRepository.kt");
+        let dependents = graph.dependents("src/main/kotlin/com/example/data/UserRepository.kt");
         assert_eq!(
-            impact,
-            vec!["src/main/kotlin/com/example/UserService.kt".to_string()]
+            dependents,
+            vec!["src/main/kotlin/com/example/UserService.kt"]
         );
     }
 
@@ -1582,7 +1278,10 @@ typealias UserName = String
         let main = graph.files.get("app/main.rb").unwrap();
         let names: Vec<&str> = main.symbols.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"Greeter"), "missing class: {names:?}");
-        assert!(names.contains(&"standalone"), "missing top-level method: {names:?}");
+        assert!(
+            names.contains(&"standalone"),
+            "missing top-level method: {names:?}"
+        );
         assert_eq!(main.depends_on, vec!["app/helpers.rb".to_string()]);
     }
 
@@ -1601,10 +1300,19 @@ typealias UserName = String
         );
         graph.resolve_dependencies();
 
-        let ctrl = graph.files.get("src/Controller/UserController.php").unwrap();
+        let ctrl = graph
+            .files
+            .get("src/Controller/UserController.php")
+            .unwrap();
         let names: Vec<&str> = ctrl.symbols.iter().map(|s| s.name.as_str()).collect();
-        assert!(names.contains(&"UserController"), "missing class: {names:?}");
-        assert!(names.contains(&"helper"), "missing top-level function: {names:?}");
+        assert!(
+            names.contains(&"UserController"),
+            "missing class: {names:?}"
+        );
+        assert!(
+            names.contains(&"helper"),
+            "missing top-level function: {names:?}"
+        );
     }
 
     #[test]
@@ -1621,6 +1329,9 @@ typealias UserName = String
         let names: Vec<&str> = f.symbols.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"User"), "missing struct: {names:?}");
         assert!(names.contains(&"Greeter"), "missing class: {names:?}");
-        assert!(names.contains(&"standalone"), "missing top-level func: {names:?}");
+        assert!(
+            names.contains(&"standalone"),
+            "missing top-level func: {names:?}"
+        );
     }
 }
