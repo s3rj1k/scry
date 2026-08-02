@@ -1,19 +1,4 @@
-use crate::types::{Chunk, SearchResult};
-
-pub fn resolve_chunk<'a>(chunks: &'a [Chunk], file_path: &str, line: usize) -> Option<&'a Chunk> {
-    let mut fallback = None;
-    for chunk in chunks {
-        if chunk.file_path == file_path && chunk.start_line <= line && line <= chunk.end_line {
-            if line < chunk.end_line {
-                return Some(chunk);
-            }
-            if fallback.is_none() {
-                fallback = Some(chunk);
-            }
-        }
-    }
-    fallback
-}
+use crate::types::SearchResult;
 
 pub fn format_results(header: &str, results: &[SearchResult]) -> String {
     let mut lines = vec![header.to_string(), String::new()];

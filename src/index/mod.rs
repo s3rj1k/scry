@@ -124,35 +124,6 @@ impl SembleIndex {
         )
     }
 
-    pub fn find_related(&self, source: &Chunk, top_k: usize) -> Vec<SearchResult> {
-        let selector = source
-            .language
-            .as_ref()
-            .and_then(|lang| self.language_mapping.get(lang))
-            .map(|indices| indices.as_slice());
-
-        let query_embedding = match self.encoder.encode_single(&source.content) {
-            Ok(e) => e,
-            Err(_) => return Vec::new(),
-        };
-
-        let results = self
-            .semantic_index
-            .query(&query_embedding, top_k + 1, selector);
-        let results: Vec<SearchResult> = results
-            .into_iter()
-            .filter(|&(idx, _)| self.chunks[idx] != *source)
-            .take(top_k)
-            .map(|(idx, dist)| SearchResult {
-                chunk: self.chunks[idx].clone(),
-                score: (1.0 - dist) as f64,
-                match_lines: vec![],
-            })
-            .collect();
-
-        results
-    }
-
     pub fn stats(&self) -> IndexStats {
         let mut language_counts: HashMap<String, usize> = HashMap::new();
         for chunk in &self.chunks {

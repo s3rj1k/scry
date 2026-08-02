@@ -2,7 +2,7 @@ use std::process;
 
 use clap::{Parser, Subcommand};
 
-use semble::format::{format_results, resolve_chunk};
+use semble::format::format_results;
 use semble::index::encoder::StaticEncoder;
 use semble::index::{IndexParams, SembleIndex};
 use semble::search::SearchParams;
@@ -23,7 +23,7 @@ struct Cli {
 enum Commands {
     /// Search a codebase with keyword/symbol query
     Search {
-        /// Query text, or a file:line location when --related is set
+        /// Query text
         query: String,
         /// Local path, defaults to the current directory
         #[arg(default_value = ".")]
@@ -68,9 +68,6 @@ enum Commands {
         /// Trailing directory names added to each BM25 document
         #[arg(long, default_value_t = 3)]
         bm25_dir_parts: usize,
-        /// Treat the query as a file:line location and return similar chunks
-        #[arg(long)]
-        related: bool,
         /// Output as JSON (for agent/tool integration)
         #[arg(long)]
         json: bool,
@@ -111,7 +108,6 @@ fn main() {
             max_file_bytes,
             bm25_stem_repeat,
             bm25_dir_parts,
-            related,
             json,
             compact,
             group,
@@ -149,21 +145,7 @@ fn main() {
             };
             let index = build_index(&path, include_text_files, model.as_deref(), &index_params);
 
-            let results = if related {
-                let (file_path, line) = parse_location(&query).unwrap_or_else(|| {
-                    eprintln!("--related expects a file:line location, got {query:?}.");
-                    process::exit(1);
-                });
-                let chunk = resolve_chunk(index.chunks(), file_path, line)
-                    .unwrap_or_else(|| {
-                        eprintln!("No chunk found at {query}.");
-                        process::exit(1);
-                    })
-                    .clone();
-                index.find_related(&chunk, top_k)
-            } else {
-                index.search(query.as_str(), top_k, &search_params, None, None)
-            };
+            let results = index.search(query.as_str(), top_k, &search_params, None, None);
 
             if group {
                 print_grouped(&results, max_match_lines);
@@ -174,22 +156,11 @@ fn main() {
             } else if results.is_empty() {
                 println!("No results found.");
             } else {
-                let header = if related {
-                    format!("Chunks related to {query}")
-                } else {
-                    format!("Search results for: {query:?}")
-                };
+                let header = format!("Search results for: {query:?}");
                 println!("{}", format_results(&header, &results));
             }
         }
     }
-}
-
-/// Parse a `file:line` location, tolerating a trailing line range like `10-20`.
-fn parse_location(loc: &str) -> Option<(&str, usize)> {
-    let (file, rest) = loc.rsplit_once(':')?;
-    let line: usize = rest.split('-').next()?.trim().parse().ok()?;
-    Some((file, line))
 }
 
 fn print_compact(results: &[SearchResult]) {
