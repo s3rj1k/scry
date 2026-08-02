@@ -1,63 +1,30 @@
 use std::collections::HashMap;
-use std::path::Path;
-
-use once_cell::sync::Lazy;
-use regex::Regex;
 
 use crate::types::Chunk;
-
-static TEST_FILE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(concat!(
-        r"(?:^|/)",
-        r"(?:",
-        r"test_[^/]*\.py",
-        r"|[^/]*_test\.py",
-        r"|[^/]*_test\.go",
-        r"|[^/]*Tests?\.java",
-        r"|[^/]*Test\.php",
-        r"|[^/]*_spec\.rb",
-        r"|[^/]*_test\.rb",
-        r"|[^/]*\.test\.[jt]sx?",
-        r"|[^/]*\.spec\.[jt]sx?",
-        r"|[^/]*Tests?\.kt",
-        r"|[^/]*Spec\.kt",
-        r"|[^/]*Tests?\.swift",
-        r"|[^/]*Spec\.swift",
-        r"|[^/]*Tests?\.cs",
-        r"|test_[^/]*\.cpp",
-        r"|[^/]*_test\.cpp",
-        r"|test_[^/]*\.c",
-        r"|[^/]*_test\.c",
-        r"|[^/]*Spec\.scala",
-        r"|[^/]*Suite\.scala",
-        r"|[^/]*Test\.scala",
-        r"|[^/]*_test\.dart",
-        r"|test_[^/]*\.dart",
-        r"|[^/]*_spec\.lua",
-        r"|[^/]*_test\.lua",
-        r"|test_[^/]*\.lua",
-        r"|test_helpers?[^/]*\.\w+",
-        r")$",
-    ))
-    .unwrap()
-});
-
-static TEST_DIR_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?:^|/)(?:tests?|__tests__|spec|testing)(?:/|$)").unwrap());
-
-static COMPAT_DIR_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?:^|/)(?:compat|_compat|legacy)(?:/|$)").unwrap());
-
-static EXAMPLES_DIR_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?:^|/)(?:_?examples?|docs?_src)(?:/|$)").unwrap());
-
-static TYPE_DEFS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\.d\.ts$").unwrap());
 
 const STRONG_PENALTY: f64 = 0.3;
 const MODERATE_PENALTY: f64 = 0.5;
 const MILD_PENALTY: f64 = 0.7;
 
 const REEXPORT_FILENAMES: &[&str] = &["__init__.py", "package-info.java"];
+
+// Path segments that mark non-canonical code.
+const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "testing"];
+const COMPAT_DIRS: &[&str] = &["compat", "_compat", "legacy"];
+const EXAMPLE_DIRS: &[&str] = &[
+    "example", "examples", "_example", "_examples", "doc_src", "docs_src",
+];
+
+// File-name markers of test files, across languages.
+const TEST_FILE_SUFFIXES: &[&str] = &[
+    "_test.py", "_test.go", "_test.rb", "_test.cpp", "_test.c", "_test.dart", "_test.lua",
+    "Test.java", "Tests.java", "Test.php", "Test.kt", "Tests.kt", "Spec.kt", "Test.swift",
+    "Tests.swift", "Spec.swift", "Test.cs", "Tests.cs", "Spec.scala", "Suite.scala", "Test.scala",
+    ".test.js", ".test.jsx", ".test.ts", ".test.tsx", ".spec.js", ".spec.jsx", ".spec.ts",
+    ".spec.tsx", "_spec.rb", "_spec.lua",
+];
+// `test_*.<ext>` prefixed test files.
+const TEST_PREFIX_EXTS: &[&str] = &[".py", ".cpp", ".c", ".dart", ".lua"];
 
 const FILE_SATURATION_THRESHOLD: usize = 1;
 const FILE_SATURATION_DECAY: f64 = 0.5;
@@ -126,27 +93,73 @@ pub fn rerank_topk(
         .collect()
 }
 
+fn is_test_file(name: &str) -> bool {
+    (name.starts_with("test_") && TEST_PREFIX_EXTS.iter().any(|e| name.ends_with(e)))
+        || name.starts_with("test_helper")
+        || TEST_FILE_SUFFIXES.iter().any(|s| name.ends_with(s))
+}
+
 fn file_path_penalty(file_path: &str) -> f64 {
-    let normalised = file_path.replace('\\', "/");
+    // Last path segment, tolerating either separator.
+    let name = file_path.rsplit(['/', '\\']).next().unwrap_or("");
+    let has_segment = |set: &[&str]| file_path.split(['/', '\\']).any(|seg| set.contains(&seg));
+
     let mut penalty = 1.0;
 
-    if TEST_FILE_RE.is_match(&normalised) || TEST_DIR_RE.is_match(&normalised) {
+    if is_test_file(name) || has_segment(TEST_DIRS) {
         penalty *= STRONG_PENALTY;
     }
-    if let Some(name) = Path::new(file_path).file_name().and_then(|n| n.to_str()) {
-        if REEXPORT_FILENAMES.contains(&name) {
-            penalty *= MODERATE_PENALTY;
-        }
+    if REEXPORT_FILENAMES.contains(&name) {
+        penalty *= MODERATE_PENALTY;
     }
-    if COMPAT_DIR_RE.is_match(&normalised) {
+    if has_segment(COMPAT_DIRS) {
         penalty *= STRONG_PENALTY;
     }
-    if EXAMPLES_DIR_RE.is_match(&normalised) {
+    if has_segment(EXAMPLE_DIRS) {
         penalty *= STRONG_PENALTY;
     }
-    if TYPE_DEFS_RE.is_match(&normalised) {
+    if name.ends_with(".d.ts") {
         penalty *= MILD_PENALTY;
     }
 
     penalty
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_files_are_penalised() {
+        assert_eq!(file_path_penalty("src/foo_test.go"), STRONG_PENALTY);
+        assert_eq!(file_path_penalty("app/UserTest.java"), STRONG_PENALTY);
+        assert_eq!(file_path_penalty("pkg/test_helpers.py"), STRONG_PENALTY);
+        assert_eq!(file_path_penalty("web/login.test.ts"), STRONG_PENALTY);
+        assert_eq!(file_path_penalty("test_parser.py"), STRONG_PENALTY);
+    }
+
+    #[test]
+    fn test_dirs_are_penalised() {
+        assert_eq!(file_path_penalty("tests/util.rs"), STRONG_PENALTY);
+        assert_eq!(file_path_penalty("src/__tests__/a.js"), STRONG_PENALTY);
+        assert_eq!(file_path_penalty("legacy/old.py"), STRONG_PENALTY);
+        assert_eq!(file_path_penalty("pkg/examples/demo.rs"), STRONG_PENALTY);
+    }
+
+    #[test]
+    fn reexports_and_declaration_files() {
+        assert_eq!(file_path_penalty("pkg/__init__.py"), MODERATE_PENALTY);
+        assert_eq!(file_path_penalty("types/index.d.ts"), MILD_PENALTY);
+    }
+
+    #[test]
+    fn normal_files_are_not_penalised() {
+        assert_eq!(file_path_penalty("src/search.rs"), 1.0);
+        assert_eq!(file_path_penalty("app/user_controller.py"), 1.0);
+    }
+
+    #[test]
+    fn windows_separators_are_handled() {
+        assert_eq!(file_path_penalty("src\\tests\\util.rs"), STRONG_PENALTY);
+    }
 }
