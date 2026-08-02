@@ -7,7 +7,7 @@ description: Find and navigate code by intent using scry (semantic code search) 
 
 Two complementary tools, used together:
 
-- **scry** finds code by *intent* (semantic embeddings with a definition boost) and returns exact `file:line` chunks. It replaces grep / cat / ls for "where is..." and "how does..." questions.
+- **scry** finds code by *intent* (semantic embeddings with a definition boost) and returns JSON chunks with the exact `file_path` and line range. It replaces grep / cat / ls for "where is..." and "how does..." questions.
 - **The LSP** walks *structure* from a known location: definitions, references, callers. It is exact, not fuzzy.
 
 Rule of thumb: **scry to find the entry point, LSP to follow the wires.**
@@ -16,20 +16,19 @@ Rule of thumb: **scry to find the entry point, LSP to follow the wires.**
 
 1. **Find** — `scry search "<intent>" <path>` returns entry-point chunks, each with a `file:start-end` range.
 2. **Judge** — read the returned chunks, not the score. Scores are rank-based (reciprocal-rank fusion), not similarity, so the top hit sits in a fixed band however good or bad the match is. Judge by whether the chunks fit and cluster; if they are scattered across unrelated files or none fit, refine the query and search again.
-3. **Narrow** — add `--compact` (path + range + keyword-matching lines) or `--group` (grouped by directory) to scan fast. The `file:start-end` range is the reliable locator; matching lines are a lexical hint and can be sparse for natural-language queries.
+3. **Read** — output is JSON. Each result carries the chunk `content`, its `file_path` with `start_line` and `end_line`, `language`, and `score`. The line range is the reliable locator; the `match_lines` are a lexical hint and can be sparse for natural-language queries.
 4. **Explore** — hand a returned `file:line` and symbol to the LSP tool (`goToDefinition`, `findReferences`, `incomingCalls`). scry finds intent; the LSP walks references.
 
 ## scry usage
 
 ```bash
-scry search "how is auth handled" .       # natural-language query
-scry search "loginWithEmail" . --compact  # score, path, matching lines
-scry search "cache layer" . --group       # grouped by directory
-scry search "retry logic" . --json        # chunk bodies, for tooling
-scry search "parser" . -k 5               # cap the result count
+scry search "how is auth handled" .          # JSON, the only output
+scry search "loginWithEmail" .               # symbol query
+scry search "parser" . -k 5                  # cap the result count
+scry search "config" . --include-text-files  # also index .md, .yaml, .json
 ```
 
-Path defaults to the current directory. Useful flags: `-k/--top-k`, `--include-text-files`, `--json`. Run `scry search --help` for the full set of tuning knobs. scry keeps no daemon and rebuilds its index per call, so repeated queries are fine and always current.
+Path defaults to the current directory. Useful flags: `-k/--top-k`, `--include-text-files`, `--model`. Run `scry search --help` for the full set of tuning knobs. scry keeps no daemon and rebuilds its index per call, so repeated queries are fine and always current.
 
 ## Setup (only if a tool is missing)
 

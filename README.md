@@ -31,8 +31,8 @@ Or point at a local model directory with `--model <dir>` or `SCRY_MODEL_PATH`.
 Intent to structure:
 
 1. **Find** — `scry search "auth flow" .` surfaces entry-point chunks.
-2. **Gauge** — low or scattered scores mean the query needs work.
-3. **Narrow** — `--compact` or `--group` pins the exact lines.
+2. **Judge** — read the chunks, not the score. Scores are rank-based, not confidence; if results are scattered or off, refine the query.
+3. **Read** — results are JSON: each carries the chunk body, its `file_path`, `start_line`/`end_line`, `language`, and `score`.
 4. **Explore** — feed the `file:line` and symbol to your LSP. Scry finds intent; the LSP walks references.
 
 ## License

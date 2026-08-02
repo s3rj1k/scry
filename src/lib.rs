@@ -1,4 +1,3 @@
-pub mod format;
 pub mod index;
 pub mod search;
 pub mod types;
