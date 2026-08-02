@@ -1,26 +1,24 @@
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 
 use crate::bm25::Bm25Index;
 use crate::encoder::{SemanticIndex, StaticEncoder};
 use crate::graph::DependencyGraph;
-use crate::ranking::{apply_query_boost, boost_multi_chunk_files, rerank_topk, resolve_alpha};
+use crate::ranking::{
+    definition_list, path_affinity_list, rerank_topk, resolve_alpha, weighted_rrf, Signal,
+};
 use crate::types::{Chunk, MatchLine, SearchResult};
 
 const RRF_K: f64 = 60.0;
 const MIN_SCORE_RATIO: f64 = 0.12;
 
-fn rrf_scores(scores: &HashMap<usize, f64>) -> HashMap<usize, f64> {
-    if scores.is_empty() {
-        return HashMap::new();
-    }
-    let mut ranked: Vec<(usize, f64)> = scores.iter().map(|(&k, &v)| (k, v)).collect();
-    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    ranked
-        .iter()
-        .enumerate()
-        .map(|(rank, &(idx, _))| (idx, 1.0 / (RRF_K + rank as f64 + 1.0)))
-        .collect()
-}
+// Fusion weights for the structural signal lists, relative to the combined
+// semantic + lexical weight of 1.0 (alpha + (1 - alpha)). Defining the queried
+// symbol is the strongest signal; path affinity is moderate; graph neighbours
+// are a weak context pull.
+const W_DEFINITION: f64 = 1.0;
+const W_PATH: f64 = 0.5;
+const W_GRAPH: f64 = 0.3;
 
 fn selector_to_mask(selector: Option<&[usize]>, size: usize) -> Option<Vec<bool>> {
     let indices = selector?;
@@ -56,48 +54,6 @@ fn find_match_lines(chunk: &Chunk, query: &str) -> Vec<MatchLine> {
     matches
 }
 
-fn boost_sibling_chunks(scores: &mut HashMap<usize, f64>, chunks: &[Chunk], query: &str) {
-    let keywords: Vec<String> = query
-        .to_lowercase()
-        .split_whitespace()
-        .filter(|w| w.len() >= 3)
-        .map(String::from)
-        .collect();
-    if keywords.is_empty() {
-        return;
-    }
-
-    let mut file_has_match: HashMap<&str, f64> = HashMap::new();
-    for (idx, chunk) in chunks.iter().enumerate() {
-        let content_lower = chunk.content.to_lowercase();
-        if keywords.iter().any(|kw| content_lower.contains(kw)) {
-            let score = scores.get(&idx).copied().unwrap_or(0.001);
-            let fp = chunk.file_path.as_str();
-            let entry = file_has_match.entry(fp).or_insert(0.0);
-            if score > *entry {
-                *entry = score;
-            }
-        }
-    }
-
-    for (idx, chunk) in chunks.iter().enumerate() {
-        let content_lower = chunk.content.to_lowercase();
-        let match_count = keywords
-            .iter()
-            .filter(|kw| content_lower.contains(kw.as_str()))
-            .count();
-        if match_count == 0 {
-            continue;
-        }
-        if let Some(existing) = scores.get_mut(&idx) {
-            let boost = *existing * 0.3 * match_count as f64;
-            *existing += boost;
-        } else if let Some(&file_score) = file_has_match.get(chunk.file_path.as_str()) {
-            scores.insert(idx, file_score * (0.8 + 0.2 * match_count as f64));
-        }
-    }
-}
-
 fn filter_low_scores(results: Vec<SearchResult>) -> Vec<SearchResult> {
     if results.len() <= 1 {
         return results;
@@ -110,43 +66,98 @@ fn filter_low_scores(results: Vec<SearchResult>) -> Vec<SearchResult> {
     results.into_iter().filter(|r| r.score >= min).collect()
 }
 
-fn boost_from_graph(scores: &mut HashMap<usize, f64>, chunks: &[Chunk], graph: &DependencyGraph) {
-    if scores.is_empty() {
-        return;
+/// BM25 ranked candidate list (chunk indices, best first), capped at `limit`.
+fn bm25_ranked(
+    query: &str,
+    bm25_index: &Bm25Index,
+    chunks: &[Chunk],
+    selector: Option<&[usize]>,
+    limit: usize,
+) -> Vec<usize> {
+    if query.trim().is_empty() {
+        return Vec::new();
     }
-    let max_score = scores.values().cloned().fold(f64::NEG_INFINITY, f64::max);
-    if max_score <= 0.0 {
-        return;
+    let mask = selector_to_mask(selector, chunks.len());
+    let raw = bm25_index.get_scores(query, mask.as_deref());
+    let mut indexed: Vec<(usize, f64)> = raw
+        .iter()
+        .enumerate()
+        .filter(|(_, &s)| s > 0.0)
+        .map(|(i, &s)| (i, s as f64))
+        .collect();
+    indexed.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+    });
+    indexed.truncate(limit);
+    indexed.into_iter().map(|(idx, _)| idx).collect()
+}
+
+/// Chunk indices ordered by their fused base score (descending), ties by index.
+fn order_by_score(scores: &HashMap<usize, f64>) -> Vec<usize> {
+    let mut v: Vec<(usize, f64)> = scores.iter().map(|(&i, &s)| (i, s)).collect();
+    v.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+    });
+    v.into_iter().map(|(idx, _)| idx).collect()
+}
+
+/// Signal list: chunks in files that are direct dependency-graph neighbours
+/// (imports or importers) of the current top-scoring files. Chunks already in
+/// the base pool are ordered first (by base score); the rest follow. This pulls
+/// call-chain context that lexical/semantic search missed.
+fn graph_list(chunks: &[Chunk], base: &HashMap<usize, f64>, graph: &DependencyGraph) -> Vec<usize> {
+    let max = base.values().cloned().fold(f64::NEG_INFINITY, f64::max);
+    if max <= 0.0 {
+        return Vec::new();
     }
 
-    let mut top_files: Vec<(&str, f64)> = Vec::new();
-    for (&idx, &score) in scores.iter() {
-        let fp = chunks[idx].file_path.as_str();
-        if score >= max_score * 0.5 {
-            top_files.push((fp, score));
+    let mut top_files: HashSet<&str> = HashSet::new();
+    for (&idx, &score) in base {
+        if score >= max * 0.5 {
+            top_files.insert(chunks[idx].file_path.as_str());
         }
     }
 
-    let boost = max_score * 0.3;
-    for (top_fp, _) in &top_files {
-        let dependents = graph.dependents(top_fp);
-        if let Some(node) = graph.deps(top_fp) {
+    let mut neighbour_files: HashSet<String> = HashSet::new();
+    for tf in &top_files {
+        if let Some(node) = graph.deps(tf) {
             for dep in &node.depends_on {
-                for (idx, chunk) in chunks.iter().enumerate() {
-                    if chunk.file_path == *dep && !scores.contains_key(&idx) {
-                        scores.insert(idx, boost * 0.5);
-                    }
-                }
+                neighbour_files.insert(dep.clone());
             }
         }
-        for dep_fp in dependents {
-            for (idx, chunk) in chunks.iter().enumerate() {
-                if chunk.file_path == dep_fp && !scores.contains_key(&idx) {
-                    scores.insert(idx, boost * 0.3);
-                }
+        for dep in graph.dependents(tf) {
+            neighbour_files.insert(dep.to_string());
+        }
+    }
+    for tf in &top_files {
+        neighbour_files.remove(*tf);
+    }
+    if neighbour_files.is_empty() {
+        return Vec::new();
+    }
+
+    let mut in_base: Vec<(usize, f64)> = Vec::new();
+    let mut rest: Vec<usize> = Vec::new();
+    for (idx, chunk) in chunks.iter().enumerate() {
+        if neighbour_files.contains(&chunk.file_path) {
+            match base.get(&idx) {
+                Some(&score) => in_base.push((idx, score)),
+                None => rest.push(idx),
             }
         }
     }
+    in_base.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+    });
+    let mut out: Vec<usize> = in_base.into_iter().map(|(idx, _)| idx).collect();
+    out.extend(rest);
+    out
 }
 
 pub fn search_bm25(
@@ -156,28 +167,16 @@ pub fn search_bm25(
     top_k: usize,
     selector: Option<&[usize]>,
 ) -> Vec<SearchResult> {
-    if query.trim().is_empty() {
-        return Vec::new();
-    }
-    let mask = selector_to_mask(selector, chunks.len());
-    let scores = bm25_index.get_scores(query, mask.as_deref());
-
-    let mut indexed: Vec<(usize, f64)> = scores
-        .iter()
-        .enumerate()
-        .filter(|(_, &s)| s > 0.0)
-        .map(|(i, &s)| (i, s as f64))
-        .collect();
-    indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    indexed.truncate(top_k);
-
-    let results: Vec<SearchResult> = indexed
+    let ranked = bm25_ranked(query, bm25_index, chunks, selector, top_k);
+    let results: Vec<SearchResult> = ranked
         .into_iter()
-        .map(|(idx, score)| {
+        .enumerate()
+        .map(|(rank, idx)| {
             let match_lines = find_match_lines(&chunks[idx], query);
             SearchResult {
                 chunk: chunks[idx].clone(),
-                score,
+                // Descending pseudo-score so ordering/filtering behave.
+                score: 1.0 / (RRF_K + rank as f64 + 1.0),
                 match_lines,
             }
         })
@@ -203,56 +202,53 @@ pub fn search_hybrid(
 
     let query_embedding = match encoder.encode_single(query) {
         Ok(e) => e,
-        Err(_) => {
-            return search_bm25(query, bm25_index, chunks, top_k, selector);
-        }
-    };
-    let semantic_results = semantic_index.query(&query_embedding, candidate_count, selector);
-    let semantic_scores: HashMap<usize, f64> = semantic_results
-        .iter()
-        .map(|&(idx, dist)| (idx, (1.0 - dist) as f64))
-        .collect();
-
-    let bm25_scores: HashMap<usize, f64> = if !query.trim().is_empty() {
-        let mask = selector_to_mask(selector, chunks.len());
-        let raw_scores = bm25_index.get_scores(query, mask.as_deref());
-        let mut indexed: Vec<(usize, f64)> = raw_scores
-            .iter()
-            .enumerate()
-            .filter(|(_, &s)| s > 0.0)
-            .map(|(i, &s)| (i, s as f64))
-            .collect();
-        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        indexed.truncate(candidate_count);
-        indexed.into_iter().collect()
-    } else {
-        HashMap::new()
+        Err(_) => return search_bm25(query, bm25_index, chunks, top_k, selector),
     };
 
-    let norm_semantic = rrf_scores(&semantic_scores);
-    let norm_bm25 = rrf_scores(&bm25_scores);
-
-    let all_indices: std::collections::HashSet<usize> = norm_semantic
-        .keys()
-        .chain(norm_bm25.keys())
-        .cloned()
+    // --- base ranked lists (natural rankings) ---
+    let sem_ranked: Vec<usize> = semantic_index
+        .query(&query_embedding, candidate_count, selector)
+        .into_iter()
+        .map(|(idx, _)| idx)
         .collect();
-    let mut combined: HashMap<usize, f64> = HashMap::new();
-    for idx in all_indices {
-        let sem = norm_semantic.get(&idx).copied().unwrap_or(0.0);
-        let bm = norm_bm25.get(&idx).copied().unwrap_or(0.0);
-        combined.insert(idx, alpha_weight * sem + (1.0 - alpha_weight) * bm);
+    let lex_ranked = bm25_ranked(query, bm25_index, chunks, selector, candidate_count);
+
+    if sem_ranked.is_empty() && lex_ranked.is_empty() {
+        return Vec::new();
     }
 
-    boost_multi_chunk_files(&mut combined, chunks);
-    apply_query_boost(&mut combined, query, chunks);
-    boost_sibling_chunks(&mut combined, chunks, query);
+    // Preliminary fusion of the two base lists — used only to order the derived
+    // structural signal lists (and to pick top files for the graph signal).
+    let base = weighted_rrf(
+        &[
+            Signal::new(alpha_weight, sem_ranked.clone()),
+            Signal::new(1.0 - alpha_weight, lex_ranked.clone()),
+        ],
+        RRF_K,
+    );
+    let pool = order_by_score(&base);
 
-    if let Some(g) = graph {
-        boost_from_graph(&mut combined, chunks, g);
-    }
+    // --- structural signal lists ---
+    let def_ranked = definition_list(query, chunks, &pool);
+    let path_ranked = path_affinity_list(query, chunks, &pool);
+    let graph_ranked = graph
+        .map(|g| graph_list(chunks, &base, g))
+        .unwrap_or_default();
 
-    let ranked = rerank_topk(&combined, chunks, top_k, alpha_weight < 1.0);
+    // --- one weighted RRF over every signal list ---
+    let fused = weighted_rrf(
+        &[
+            Signal::new(alpha_weight, sem_ranked),
+            Signal::new(1.0 - alpha_weight, lex_ranked),
+            Signal::new(W_DEFINITION, def_ranked),
+            Signal::new(W_PATH, path_ranked),
+            Signal::new(W_GRAPH, graph_ranked),
+        ],
+        RRF_K,
+    );
+
+    // --- path-noise penalties + per-file diversity + top_k ---
+    let ranked = rerank_topk(&fused, chunks, top_k, alpha_weight < 1.0);
 
     let results: Vec<SearchResult> = ranked
         .into_iter()
