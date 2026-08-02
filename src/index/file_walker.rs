@@ -324,7 +324,7 @@ pub fn default_ignored_dirs() -> HashSet<String> {
         ".pytest_cache",
         ".ruff_cache",
         ".cache",
-        ".semble",
+        ".scry",
         ".next",
         "dist",
         "build",

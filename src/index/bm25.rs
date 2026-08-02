@@ -2,12 +2,12 @@ use bm25::{Embedder, EmbedderBuilder, Scorer, Tokenizer};
 
 use crate::tokens::tokenize;
 
-/// Adapts semble's code aware tokenizer (camelCase and snake_case splitting) to
+/// Adapts scry's code aware tokenizer (camelCase and snake_case splitting) to
 /// the `bm25` crate so BM25 indexes the same tokens as the rest of the engine.
 #[derive(Default, Clone)]
-struct SembleTokenizer;
+struct ScryTokenizer;
 
-impl Tokenizer for SembleTokenizer {
+impl Tokenizer for ScryTokenizer {
     fn tokenize(&self, input_text: &str) -> Vec<String> {
         tokenize(input_text)
     }
@@ -16,14 +16,14 @@ impl Tokenizer for SembleTokenizer {
 /// In memory BM25 index backed by the `bm25` crate. Document ids are chunk
 /// indices so scores align with the semantic index and the chunk array.
 pub struct Bm25Index {
-    embedder: Embedder<u32, SembleTokenizer>,
+    embedder: Embedder<u32, ScryTokenizer>,
     scorer: Scorer<usize, u32>,
     num_docs: usize,
 }
 
 impl Bm25Index {
     /// Build the index from raw untokenized document texts. The embedder
-    /// tokenizes them via [`SembleTokenizer`].
+    /// tokenizes them via [`ScryTokenizer`].
     pub fn new(documents: &[String]) -> Self {
         let avgdl = if documents.is_empty() {
             1.0
@@ -32,8 +32,8 @@ impl Bm25Index {
             (total as f32 / documents.len() as f32).max(1.0)
         };
 
-        let embedder = EmbedderBuilder::<u32, SembleTokenizer>::with_avgdl(avgdl)
-            .tokenizer(SembleTokenizer)
+        let embedder = EmbedderBuilder::<u32, ScryTokenizer>::with_avgdl(avgdl)
+            .tokenizer(ScryTokenizer)
             .build();
 
         let mut scorer = Scorer::<usize, u32>::new();

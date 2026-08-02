@@ -41,7 +41,7 @@ impl Default for IndexParams {
     }
 }
 
-pub struct SembleIndex {
+pub struct ScryIndex {
     encoder: StaticEncoder,
     bm25_index: Bm25Index,
     semantic_index: SemanticIndex,
@@ -52,7 +52,7 @@ pub struct SembleIndex {
     language_mapping: HashMap<String, Vec<usize>>,
 }
 
-impl SembleIndex {
+impl ScryIndex {
     pub fn from_path(
         path: impl AsRef<Path>,
         encoder: StaticEncoder,

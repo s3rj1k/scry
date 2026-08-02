@@ -4,7 +4,7 @@ These `<language>.scm` files are **tag queries** consumed by
 [`tree-sitter-tags`](https://docs.rs/tree-sitter-tags) to extract symbol
 definitions (see `src/symbols.rs`). Each file is copied **verbatim** from the
 `queries/tags.scm` that ships inside the corresponding tree-sitter grammar
-crate, at the version semble depends on. They remain under their upstream
+crate, at the version scry depends on. They remain under their upstream
 grammar's license (MIT).
 
 They are vendored (rather than read from the grammar crate at runtime) because a
@@ -41,4 +41,4 @@ over the matching file here.
 - These queries define the symbol vocabulary (`@definition.function`,
   `@definition.class`, `@definition.method`, `@definition.interface`, ...).
   Coverage is whatever upstream defines — e.g. TypeScript `type` aliases and
-  Rust `struct`-vs-`class` granularity follow the query, not semble.
+  Rust `struct`-vs-`class` granularity follow the query, not scry.

@@ -1,23 +1,23 @@
 [package]
-name = "semble"
-version = "0.9.1"
+name = "scry"
+version = "0.1.0"
 edition = "2021"
-description = "Fast, accurate, AI-agent-native code search in Rust — hybrid BM25 + semantic search, Tree-sitter AST chunking, dependency & impact analysis. A drop-in replacement for grep/cat/read/ls in Claude Code, Codex, Cursor, Aider, and OpenHands agent sessions."
+description = "Scry finds code by intent with hybrid semantic + lexical search, returning the exact file and line."
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/johunsang/semble_rs"
-repository = "https://github.com/johunsang/semble_rs"
-documentation = "https://github.com/johunsang/semble_rs#readme"
+homepage = "https://github.com/s3rj1k/scry"
+repository = "https://github.com/s3rj1k/scry"
+documentation = "https://github.com/s3rj1k/scry#readme"
 keywords = ["code-search", "ai-agent", "semantic-search", "embeddings", "tree-sitter"]
 categories = ["command-line-utilities", "development-tools", "text-processing"]
-authors = ["hunsang jo <johunsang@gmail.com>"]
+authors = ["s3rj1k <evasive.gyron@gmail.com>"]
 
 [[bin]]
-name = "semble_rs"
+name = "scry"
 path = "src/main.rs"
 
 [lib]
-name = "semble"
+name = "scry"
 path = "src/lib.rs"
 
 [dependencies]

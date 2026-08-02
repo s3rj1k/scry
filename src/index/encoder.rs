@@ -42,8 +42,8 @@ impl StaticEncoder {
 }
 
 /// Resolve `name_or_path` to a local model directory without any network
-/// access. Search order: an explicit local directory, `SEMBLE_MODEL_PATH`, the
-/// Hugging Face hub cache, the current directory, then the semble binary's
+/// access. Search order: an explicit local directory, `SCRY_MODEL_PATH`, the
+/// Hugging Face hub cache, the current directory, then the scry binary's
 /// directory. Errors listing where it looked when nothing matches.
 fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
     // A directory the caller points at directly wins; the loader validates it.
@@ -54,7 +54,7 @@ fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
     let mut searched: Vec<PathBuf> = Vec::new();
     let bare = name_or_path.rsplit('/').next().unwrap_or(name_or_path);
 
-    if let Some(dir) = std::env::var_os("SEMBLE_MODEL_PATH").map(PathBuf::from) {
+    if let Some(dir) = std::env::var_os("SCRY_MODEL_PATH").map(PathBuf::from) {
         if is_model_dir(&dir) {
             return Ok(dir);
         }
@@ -97,11 +97,11 @@ fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
         .collect::<Vec<_>>()
         .join("\n");
     bail!(
-        "Embedding model {name_or_path:?} not found locally, and semble never \
+        "Embedding model {name_or_path:?} not found locally, and scry never \
          downloads from the network.\nLooked in:\n{looked}\n\nFetch it into one \
          of those locations, e.g.:\n  huggingface-cli download {name_or_path} \
          --local-dir ./{bare}\nor point at an existing copy with `--model <dir>` \
-         or `SEMBLE_MODEL_PATH=<dir>`."
+         or `SCRY_MODEL_PATH=<dir>`."
     )
 }
 

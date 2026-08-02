@@ -2,19 +2,19 @@ use std::process;
 
 use clap::{Parser, Subcommand};
 
-use semble::format::format_results;
-use semble::index::chunking::DESIRED_CHUNK_LENGTH_CHARS;
-use semble::index::encoder::StaticEncoder;
-use semble::index::{IndexParams, SembleIndex};
-use semble::search::ranking::{ALPHA_NL, ALPHA_SYMBOL};
-use semble::search::SearchParams;
-use semble::types::SearchResult;
+use scry::format::format_results;
+use scry::index::chunking::DESIRED_CHUNK_LENGTH_CHARS;
+use scry::index::encoder::StaticEncoder;
+use scry::index::{IndexParams, ScryIndex};
+use scry::search::ranking::{ALPHA_NL, ALPHA_SYMBOL};
+use scry::search::SearchParams;
+use scry::types::SearchResult;
 
 #[derive(Parser)]
 #[command(
-    name = "semble_rs",
+    name = "scry",
     version,
-    about = "Fast and Accurate Code Search for Agents"
+    about = "Scry finds code by intent with hybrid semantic + lexical search, returning the exact file and line."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -250,12 +250,12 @@ fn build_index(
     include_text_files: bool,
     model: &str,
     index_params: &IndexParams,
-) -> SembleIndex {
+) -> ScryIndex {
     let encoder = StaticEncoder::load(model).unwrap_or_else(|e| {
         eprintln!("{e:#}");
         process::exit(1);
     });
-    match SembleIndex::from_path(path, encoder, None, None, include_text_files, index_params) {
+    match ScryIndex::from_path(path, encoder, None, None, include_text_files, index_params) {
         Ok(idx) => idx,
         Err(e) => {
             eprintln!("Error: {e:?}");

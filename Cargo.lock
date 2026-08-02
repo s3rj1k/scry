@@ -1450,8 +1450,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "semble"
-version = "0.9.1"
+name = "scry"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "bm25",
