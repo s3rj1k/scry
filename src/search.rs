@@ -1,9 +1,8 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::bm25::Bm25Index;
 use crate::encoder::{SemanticIndex, StaticEncoder};
-use crate::graph::DependencyGraph;
 use crate::ranking::{
     definition_list, path_affinity_list, rerank_topk, resolve_alpha, weighted_rrf, Signal,
 };
@@ -14,11 +13,9 @@ const MIN_SCORE_RATIO: f64 = 0.12;
 
 // Fusion weights for the structural signal lists, relative to the combined
 // semantic + lexical weight of 1.0 (alpha + (1 - alpha)). Defining the queried
-// symbol is the strongest signal; path affinity is moderate; graph neighbours
-// are a weak context pull.
+// symbol is the strongest signal; path affinity is a moderate one.
 const W_DEFINITION: f64 = 1.0;
 const W_PATH: f64 = 0.5;
-const W_GRAPH: f64 = 0.3;
 
 fn selector_to_mask(selector: Option<&[usize]>, size: usize) -> Option<Vec<bool>> {
     let indices = selector?;
@@ -105,61 +102,6 @@ fn order_by_score(scores: &HashMap<usize, f64>) -> Vec<usize> {
     v.into_iter().map(|(idx, _)| idx).collect()
 }
 
-/// Signal list: chunks in files that are direct dependency-graph neighbours
-/// (imports or importers) of the current top-scoring files. Chunks already in
-/// the base pool are ordered first (by base score); the rest follow. This pulls
-/// call-chain context that lexical/semantic search missed.
-fn graph_list(chunks: &[Chunk], base: &HashMap<usize, f64>, graph: &DependencyGraph) -> Vec<usize> {
-    let max = base.values().cloned().fold(f64::NEG_INFINITY, f64::max);
-    if max <= 0.0 {
-        return Vec::new();
-    }
-
-    let mut top_files: HashSet<&str> = HashSet::new();
-    for (&idx, &score) in base {
-        if score >= max * 0.5 {
-            top_files.insert(chunks[idx].file_path.as_str());
-        }
-    }
-
-    let mut neighbour_files: HashSet<String> = HashSet::new();
-    for tf in &top_files {
-        if let Some(node) = graph.deps(tf) {
-            for dep in &node.depends_on {
-                neighbour_files.insert(dep.clone());
-            }
-        }
-        for dep in graph.dependents(tf) {
-            neighbour_files.insert(dep.to_string());
-        }
-    }
-    for tf in &top_files {
-        neighbour_files.remove(*tf);
-    }
-    if neighbour_files.is_empty() {
-        return Vec::new();
-    }
-
-    let mut in_base: Vec<(usize, f64)> = Vec::new();
-    let mut rest: Vec<usize> = Vec::new();
-    for (idx, chunk) in chunks.iter().enumerate() {
-        if neighbour_files.contains(&chunk.file_path) {
-            match base.get(&idx) {
-                Some(&score) => in_base.push((idx, score)),
-                None => rest.push(idx),
-            }
-        }
-    }
-    in_base.sort_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
-    let mut out: Vec<usize> = in_base.into_iter().map(|(idx, _)| idx).collect();
-    out.extend(rest);
-    out
-}
-
 pub fn search_bm25(
     query: &str,
     bm25_index: &Bm25Index,
@@ -195,7 +137,6 @@ pub fn search_hybrid(
     top_k: usize,
     alpha: Option<f64>,
     selector: Option<&[usize]>,
-    graph: Option<&DependencyGraph>,
 ) -> Vec<SearchResult> {
     let alpha_weight = resolve_alpha(query, alpha);
     let candidate_count = top_k * 5;
@@ -218,7 +159,7 @@ pub fn search_hybrid(
     }
 
     // Preliminary fusion of the two base lists — used only to order the derived
-    // structural signal lists (and to pick top files for the graph signal).
+    // structural signal lists.
     let base = weighted_rrf(
         &[
             Signal::new(alpha_weight, sem_ranked.clone()),
@@ -231,9 +172,6 @@ pub fn search_hybrid(
     // --- structural signal lists ---
     let def_ranked = definition_list(query, chunks, &pool);
     let path_ranked = path_affinity_list(query, chunks, &pool);
-    let graph_ranked = graph
-        .map(|g| graph_list(chunks, &base, g))
-        .unwrap_or_default();
 
     // --- one weighted RRF over every signal list ---
     let fused = weighted_rrf(
@@ -242,7 +180,6 @@ pub fn search_hybrid(
             Signal::new(1.0 - alpha_weight, lex_ranked),
             Signal::new(W_DEFINITION, def_ranked),
             Signal::new(W_PATH, path_ranked),
-            Signal::new(W_GRAPH, graph_ranked),
         ],
         RRF_K,
     );

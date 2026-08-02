@@ -7,7 +7,6 @@ use anyhow::{bail, Context, Result};
 
 use crate::bm25::Bm25Index;
 use crate::encoder::{SemanticIndex, StaticEncoder};
-use crate::graph::DependencyGraph;
 use crate::search::search_hybrid;
 use crate::types::{Chunk, IndexStats, SearchResult};
 use create::create_index_from_path;
@@ -23,7 +22,6 @@ pub struct SembleIndex {
     root: Option<PathBuf>,
     file_mapping: HashMap<String, Vec<usize>>,
     language_mapping: HashMap<String, Vec<usize>>,
-    graph: DependencyGraph,
 }
 
 impl SembleIndex {
@@ -47,7 +45,7 @@ impl SembleIndex {
             None => StaticEncoder::load(None).context("Failed to load embedding model")?,
         };
 
-        let (bm25_index, semantic_index, chunks, graph) = create_index_from_path(
+        let (bm25_index, semantic_index, chunks) = create_index_from_path(
             &path,
             &encoder,
             extensions,
@@ -66,7 +64,6 @@ impl SembleIndex {
             root: Some(path),
             file_mapping,
             language_mapping,
-            graph,
         })
     }
 
@@ -94,7 +91,6 @@ impl SembleIndex {
             top_k,
             alpha,
             selector_ref,
-            Some(&self.graph),
         )
     }
 
@@ -143,9 +139,6 @@ impl SembleIndex {
 
     pub fn chunks(&self) -> &[Chunk] {
         &self.chunks
-    }
-    pub fn graph(&self) -> &DependencyGraph {
-        &self.graph
     }
 
     fn get_selector(

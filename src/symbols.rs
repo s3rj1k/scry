@@ -12,7 +12,13 @@ use once_cell::sync::Lazy;
 use tree_sitter::Language;
 use tree_sitter_tags::{TagsConfiguration, TagsContext};
 
-use crate::graph::Symbol;
+/// A symbol definition extracted from a source file.
+#[derive(Debug, Clone)]
+pub struct Symbol {
+    pub name: String,
+    pub kind: String,
+    pub line: usize,
+}
 
 fn language_and_query(name: &str) -> Option<(Language, &'static str)> {
     let (lang_fn, query) = match name {
@@ -115,4 +121,59 @@ pub fn extract_symbols(source: &str, language: &str) -> Vec<Symbol> {
         });
     }
     symbols
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(source: &str, lang: &str) -> Vec<String> {
+        extract_symbols(source, lang)
+            .into_iter()
+            .map(|s| s.name)
+            .collect()
+    }
+
+    #[test]
+    fn rust_symbols() {
+        let src = "pub fn search(q: &str) {}\nstruct Index {}\n";
+        let syms = extract_symbols(src, "rust");
+        let names: Vec<&str> = syms.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"search"));
+        assert!(names.contains(&"Index"));
+        // tags map all Rust ADTs to the "class" kind.
+        let index = syms.iter().find(|s| s.name == "Index").unwrap();
+        assert_eq!(index.kind, "class");
+    }
+
+    #[test]
+    fn python_captures_nested_methods() {
+        let src = "class FileWalker:\n    def walk(self):\n        pass\n\ndef main():\n    pass\n";
+        let n = names(src, "python");
+        assert!(n.contains(&"FileWalker".to_string()));
+        assert!(n.contains(&"walk".to_string())); // nested method is captured
+        assert!(n.contains(&"main".to_string()));
+    }
+
+    #[test]
+    fn typescript_composes_javascript_query() {
+        let src = "export async function getUser() {}\nexport const createPage = async () => {};\nexport interface UserProfile {}\n";
+        let n = names(src, "typescript");
+        assert!(n.contains(&"getUser".to_string()));
+        assert!(n.contains(&"createPage".to_string()));
+        assert!(n.contains(&"UserProfile".to_string()));
+    }
+
+    #[test]
+    fn go_symbols() {
+        let src = "package main\n\nfunc main() {}\n\nfunc helper() int { return 42 }\n";
+        let n = names(src, "go");
+        assert!(n.contains(&"main".to_string()));
+        assert!(n.contains(&"helper".to_string()));
+    }
+
+    #[test]
+    fn unsupported_language_yields_nothing() {
+        assert!(extract_symbols("class Foo", "kotlin").is_empty());
+    }
 }

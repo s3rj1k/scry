@@ -7,7 +7,7 @@ use crate::bm25::Bm25Index;
 use crate::chunking::chunk_source;
 use crate::encoder::{SemanticIndex, StaticEncoder};
 use crate::file_walker::{filter_extensions, language_for_path, walk_files};
-use crate::graph::DependencyGraph;
+use crate::symbols::extract_symbols;
 use crate::types::Chunk;
 
 const MAX_FILE_BYTES: u64 = 1_000_000;
@@ -48,12 +48,11 @@ pub fn create_index_from_path(
     ignore: Option<&HashSet<String>>,
     include_text_files: bool,
     display_root: &Path,
-) -> Result<(Bm25Index, SemanticIndex, Vec<Chunk>, DependencyGraph)> {
+) -> Result<(Bm25Index, SemanticIndex, Vec<Chunk>)> {
     let exts = filter_extensions(extensions, include_text_files);
     let files = walk_files(path, &exts, ignore);
 
     let mut chunks: Vec<Chunk> = Vec::new();
-    let mut graph = DependencyGraph::new();
 
     for file_path in &files {
         let metadata = match file_path.metadata() {
@@ -73,30 +72,27 @@ pub fn create_index_from_path(
             .unwrap_or(file_path)
             .to_string_lossy()
             .to_string();
-        chunks.extend(chunk_source(&source, &chunk_path, language));
 
+        let mut file_chunks = chunk_source(&source, &chunk_path, language);
+
+        // Attach the AST symbols each chunk defines (tag-based) so ranking can
+        // detect definitions structurally.
         if let Some(lang) = language {
-            graph.add_file(&chunk_path, &source, lang);
+            let symbols = extract_symbols(&source, lang);
+            for chunk in &mut file_chunks {
+                chunk.symbols = symbols
+                    .iter()
+                    .filter(|s| s.line >= chunk.start_line && s.line <= chunk.end_line)
+                    .map(|s| s.name.clone())
+                    .collect();
+            }
         }
+
+        chunks.extend(file_chunks);
     }
 
     if chunks.is_empty() {
         bail!("No supported files found under {}", path.display());
-    }
-
-    graph.resolve_dependencies();
-
-    // Attach the AST symbols each chunk defines (from the dependency graph),
-    // so ranking can detect definitions structurally instead of via regex.
-    for chunk in &mut chunks {
-        if let Some(node) = graph.deps(&chunk.file_path) {
-            chunk.symbols = node
-                .symbols
-                .iter()
-                .filter(|s| s.line >= chunk.start_line && s.line <= chunk.end_line)
-                .map(|s| s.name.clone())
-                .collect();
-        }
     }
 
     let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
@@ -108,5 +104,5 @@ pub fn create_index_from_path(
     let bm25_docs: Vec<String> = chunks.iter().map(enrich_for_bm25).collect();
     let bm25_index = Bm25Index::new(&bm25_docs);
 
-    Ok((bm25_index, semantic_index, chunks, graph))
+    Ok((bm25_index, semantic_index, chunks))
 }
