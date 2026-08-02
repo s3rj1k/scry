@@ -46,7 +46,11 @@ fn char_split(slice: &str, lang: Option<&Language>, budget: usize) -> Vec<(usize
 /// bytes so it never slices a multi byte character.
 fn line_at(source: &str, offset: usize) -> usize {
     let end = offset.min(source.len());
-    source.as_bytes()[..end].iter().filter(|&&b| b == b'\n').count() + 1
+    source.as_bytes()[..end]
+        .iter()
+        .filter(|&&b| b == b'\n')
+        .count()
+        + 1
 }
 
 fn node_size(n: Node) -> usize {
@@ -169,7 +173,14 @@ fn chunk_node(
     let mut cursor = node.walk();
     let children: Vec<Node> = node.named_children(&mut cursor).collect();
     if children.is_empty() {
-        push_leaf(node.start_byte(), node.end_byte(), source, budget, lang, out);
+        push_leaf(
+            node.start_byte(),
+            node.end_byte(),
+            source,
+            budget,
+            lang,
+            out,
+        );
         return;
     }
 

@@ -3,7 +3,8 @@
 
 use std::collections::HashMap;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
+
 use tree_sitter::Language;
 use tree_sitter_tags::{TagsConfiguration, TagsContext};
 
@@ -70,7 +71,7 @@ const LANGUAGES: &[&str] = &[
 
 /// Compiled tag configuration per language, built once. A language whose query
 /// fails to compile is omitted and its files simply get no symbols.
-static CONFIGS: Lazy<HashMap<&'static str, TagsConfiguration>> = Lazy::new(|| {
+static CONFIGS: LazyLock<HashMap<&'static str, TagsConfiguration>> = LazyLock::new(|| {
     let mut configs = HashMap::new();
     for &lang in LANGUAGES {
         if let Some((language, query)) = language_and_query(lang) {

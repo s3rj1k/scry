@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 use crate::types::Chunk;
@@ -36,7 +37,7 @@ pub fn weighted_rrf(signals: &[Signal], k: f64) -> HashMap<usize, f64> {
 
 // definition signal
 
-static SYMBOL_QUERY_RE: Lazy<Regex> = Lazy::new(|| {
+static SYMBOL_QUERY_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"^(?:",
         r"[A-Za-z_][A-Za-z0-9_]*(?:(?:::|\\|->|\.)[A-Za-z_][A-Za-z0-9_]*)+",
@@ -48,7 +49,7 @@ static SYMBOL_QUERY_RE: Lazy<Regex> = Lazy::new(|| {
     .unwrap()
 });
 
-static EMBEDDED_SYMBOL_RE: Lazy<Regex> = Lazy::new(|| {
+static EMBEDDED_SYMBOL_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"\b(?:",
         r"[A-Z][a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*",
