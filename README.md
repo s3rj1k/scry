@@ -22,7 +22,7 @@ cargo install --path .
 Scry never downloads models. Install the default embedder into the Hugging Face cache once:
 
 ```bash
-huggingface-cli download minishlab/potion-code-16M-v2
+hf download minishlab/potion-code-16M-v2
 ```
 
 Or point at a local model directory with `--model <dir>` or `SCRY_MODEL_PATH`.

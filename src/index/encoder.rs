@@ -78,8 +78,8 @@ fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
     bail!(
         "Embedding model {name_or_path:?} not found locally, and scry never \
          downloads from the network.\nLooked in:\n{looked}\n\nFetch it into the \
-         Hugging Face cache with:\n  huggingface-cli download {name_or_path}\nor \
-         point at an existing copy with `--model <dir>` or `SCRY_MODEL_PATH=<dir>`."
+         Hugging Face cache with:\n  hf download {name_or_path}\nor point at an \
+         existing copy with `--model <dir>` or `SCRY_MODEL_PATH=<dir>`."
     )
 }
 
