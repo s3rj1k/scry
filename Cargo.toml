@@ -1,6 +1,6 @@
 [package]
 name = "scry"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
 description = "Scry finds code by intent with hybrid semantic + lexical search, returning the exact file and line."
 license = "MIT"

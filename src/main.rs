@@ -13,7 +13,7 @@ use scry::types::SearchResult;
 #[derive(Parser)]
 #[command(
     name = "scry",
-    version,
+    version = env!("SCRY_VERSION"),
     about = "Scry finds code by intent with hybrid semantic + lexical search, returning the exact file and line."
 )]
 struct Cli {
