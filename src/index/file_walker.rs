@@ -331,7 +331,7 @@ pub fn default_ignored_dirs() -> HashSet<String> {
         ".eggs",
     ]
     .iter()
-    .map(|s| s.to_string())
+    .map(std::string::ToString::to_string)
     .collect()
 }
 
@@ -362,11 +362,11 @@ pub fn walk_files(
     let default_ignored = default_ignored_dirs();
     let all_ignored: HashSet<&str> = default_ignored
         .iter()
-        .map(|s| s.as_str())
+        .map(std::string::String::as_str)
         .chain(
             ignore_dirs
                 .into_iter()
-                .flat_map(|s| s.iter().map(|s| s.as_str())),
+                .flat_map(|s| s.iter().map(std::string::String::as_str)),
         )
         .collect();
 
@@ -385,14 +385,13 @@ pub fn walk_files(
         .git_ignore(true)
         .git_global(false)
         .git_exclude(false)
-        .sort_by_file_name(|a, b| a.cmp(b))
+        .sort_by_file_name(std::cmp::Ord::cmp)
         .build();
 
     let mut files = Vec::new();
     for result in walker {
-        let entry = match result {
-            Ok(e) => e,
-            Err(_) => continue,
+        let Ok(entry) = result else {
+            continue;
         };
 
         if !entry.file_type().is_some_and(|ft| ft.is_file()) {

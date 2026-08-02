@@ -25,16 +25,14 @@ pub fn create_index_from_path(
     let mut chunks: Vec<Chunk> = Vec::new();
 
     for file_path in &files {
-        let metadata = match file_path.metadata() {
-            Ok(m) => m,
-            Err(_) => continue,
+        let Ok(metadata) = file_path.metadata() else {
+            continue;
         };
         if metadata.len() > params.max_file_bytes {
             continue;
         }
-        let source = match std::fs::read_to_string(file_path) {
-            Ok(s) => s,
-            Err(_) => continue,
+        let Ok(source) = std::fs::read_to_string(file_path) else {
+            continue;
         };
         let language = language_for_path(file_path);
         let chunk_path = file_path

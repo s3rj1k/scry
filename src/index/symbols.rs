@@ -94,9 +94,8 @@ pub fn extract_symbols(source: &str, language: &str) -> Vec<Symbol> {
 
     let mut context = TagsContext::new();
     let bytes = source.as_bytes();
-    let tags = match context.generate_tags(config, bytes, None) {
-        Ok((tags, _)) => tags,
-        Err(_) => return Vec::new(),
+    let Ok((tags, _)) = context.generate_tags(config, bytes, None) else {
+        return Vec::new();
     };
 
     let mut symbols = Vec::new();

@@ -26,6 +26,7 @@ regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ignore = "0.4"
+bytecount = { version = "0.6", features = ["runtime-dispatch-simd"] }
 ndarray = "0.17"
 log = "0.4"
 env_logger = "0.11"

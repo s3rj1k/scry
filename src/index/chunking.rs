@@ -46,11 +46,7 @@ fn char_split(slice: &str, lang: Option<&Language>, budget: usize) -> Vec<(usize
 /// bytes so it never slices a multi byte character.
 fn line_at(source: &str, offset: usize) -> usize {
     let end = offset.min(source.len());
-    source.as_bytes()[..end]
-        .iter()
-        .filter(|&&b| b == b'\n')
-        .count()
-        + 1
+    bytecount::count(&source.as_bytes()[..end], b'\n') + 1
 }
 
 fn node_size(n: Node) -> usize {
@@ -200,8 +196,7 @@ fn chunk_node(
             flush(&mut buf, &mut bufsz, out);
             let region_start = leading
                 .first()
-                .map(|c| c.start_byte())
-                .unwrap_or_else(|| child.start_byte());
+                .map_or_else(|| child.start_byte(), tree_sitter::Node::start_byte);
             if depth < MAX_DEPTH && child.named_child_count() >= 2 {
                 let before = out.len();
                 chunk_node(child, source, budget, depth + 1, lang, out);

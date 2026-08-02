@@ -15,7 +15,7 @@ pub struct SearchParams {
     pub min_score_ratio: f64,
     /// Weight of the definition signal, relative to the semantic signal of 1.
     pub def_weight: f64,
-    /// Candidate pool size as a multiple of top_k.
+    /// Candidate pool size as a multiple of `top_k`.
     pub candidate_multiplier: usize,
 }
 
@@ -89,9 +89,8 @@ pub fn search_semantic(
 ) -> Vec<SearchResult> {
     let candidate_count = top_k * params.candidate_multiplier;
 
-    let query_embedding = match encoder.encode_single(query) {
-        Ok(e) => e,
-        Err(_) => return Vec::new(),
+    let Ok(query_embedding) = encoder.encode_single(query) else {
+        return Vec::new();
     };
 
     let sem_ranked: Vec<usize> = semantic_index

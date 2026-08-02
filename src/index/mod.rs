@@ -150,7 +150,7 @@ impl ScryIndex {
         if indices.is_empty() {
             None
         } else {
-            indices.sort();
+            indices.sort_unstable();
             indices.dedup();
             Some(indices)
         }

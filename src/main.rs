@@ -43,7 +43,7 @@ enum Commands {
         /// Weight of the definition signal in the fusion
         #[arg(long, default_value_t = 1.0)]
         def_weight: f64,
-        /// Candidate pool size as a multiple of top_k
+        /// Candidate pool size as a multiple of `top_k`
         #[arg(long, default_value_t = 5)]
         candidates: usize,
         /// Target chunk size in characters at index time
