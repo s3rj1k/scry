@@ -2,7 +2,7 @@ use std::process;
 
 use clap::{Parser, Subcommand};
 
-use semble::format::utils::{format_results, resolve_chunk};
+use semble::format::{format_results, resolve_chunk};
 use semble::index::encoder::StaticEncoder;
 use semble::index::SembleIndex;
 use semble::types::SearchResult;
