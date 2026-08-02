@@ -5,18 +5,15 @@ use std::collections::HashMap;
 
 use crate::index::bm25::Bm25Index;
 use crate::index::encoder::{SemanticIndex, StaticEncoder};
-use crate::search::ranking::{
-    definition_list, path_affinity_list, rerank_topk, resolve_alpha, weighted_rrf, Signal,
-};
+use crate::search::ranking::{definition_list, resolve_alpha, weighted_rrf, Signal};
 use crate::types::{Chunk, MatchLine, SearchResult};
 
 const RRF_K: f64 = 60.0;
 const MIN_SCORE_RATIO: f64 = 0.12;
 
-// Weights for the structural signal lists. Defining the queried symbol is the
-// strongest signal and path affinity is a moderate one.
+// Weight for the definition signal, relative to the combined semantic plus
+// lexical weight of 1.0. Defining the queried symbol is the strongest signal.
 const W_DEFINITION: f64 = 1.0;
-const W_PATH: f64 = 0.5;
 
 fn selector_to_mask(selector: Option<&[usize]>, size: usize) -> Option<Vec<bool>> {
     let indices = selector?;
@@ -92,15 +89,15 @@ fn bm25_ranked(
     indexed.into_iter().map(|(idx, _)| idx).collect()
 }
 
-/// Chunk indices ordered by their fused base score (descending), ties by index.
-fn order_by_score(scores: &HashMap<usize, f64>) -> Vec<usize> {
+/// Chunk index and score pairs sorted by score descending, ties by index.
+fn sorted_by_score(scores: &HashMap<usize, f64>) -> Vec<(usize, f64)> {
     let mut v: Vec<(usize, f64)> = scores.iter().map(|(&i, &s)| (i, s)).collect();
     v.sort_by(|a, b| {
         b.1.partial_cmp(&a.1)
             .unwrap_or(Ordering::Equal)
             .then(a.0.cmp(&b.0))
     });
-    v.into_iter().map(|(idx, _)| idx).collect()
+    v
 }
 
 pub fn search_bm25(
@@ -168,11 +165,10 @@ pub fn search_hybrid(
         ],
         RRF_K,
     );
-    let pool = order_by_score(&base);
+    let pool: Vec<usize> = sorted_by_score(&base).into_iter().map(|(i, _)| i).collect();
 
-    // structural signal lists
+    // the one structural signal, definitions of the queried symbol
     let def_ranked = definition_list(query, chunks, &pool);
-    let path_ranked = path_affinity_list(query, chunks, &pool);
 
     // one weighted RRF over every signal list
     let fused = weighted_rrf(
@@ -180,13 +176,13 @@ pub fn search_hybrid(
             Signal::new(alpha_weight, sem_ranked),
             Signal::new(1.0 - alpha_weight, lex_ranked),
             Signal::new(W_DEFINITION, def_ranked),
-            Signal::new(W_PATH, path_ranked),
         ],
         RRF_K,
     );
 
-    // path noise penalties plus per file diversity then top_k
-    let ranked = rerank_topk(&fused, chunks, top_k, alpha_weight < 1.0);
+    // take the top_k by fused score
+    let mut ranked = sorted_by_score(&fused);
+    ranked.truncate(top_k);
 
     let results: Vec<SearchResult> = ranked
         .into_iter()

@@ -2,8 +2,6 @@ use std::process;
 
 use clap::{Parser, Subcommand};
 
-use semble::format::filter::smart_strip;
-use semble::format::outline::extract_signature_near;
 use semble::format::utils::{format_results, resolve_chunk};
 use semble::index::encoder::StaticEncoder;
 use semble::index::SembleIndex;
@@ -41,12 +39,6 @@ enum Commands {
         /// Compact output with file paths, scores, and match lines only
         #[arg(long)]
         compact: bool,
-        /// Strip comments from code chunks in JSON output to reduce tokens
-        #[arg(long)]
-        strip: bool,
-        /// Outline output, one signature line per chunk
-        #[arg(long)]
-        outline: bool,
         /// Group results by directory + cap match lines at 3 per chunk
         #[arg(long)]
         group: bool,
@@ -91,22 +83,16 @@ fn main() {
             include_text_files,
             json,
             compact,
-            strip,
-            outline,
             group,
             model,
         } => {
             let index = build_index(&path, include_text_files, model.as_deref());
 
             let results = index.search(query.as_str(), top_k, None, None, None);
-            if outline {
-                print_outline(&results);
-            } else if group {
+            if group {
                 print_grouped(&results);
             } else if compact {
                 print_compact(&results);
-            } else if json && strip {
-                print_json_stripped(&results);
             } else if json {
                 print_json(&results);
             } else if results.is_empty() {
@@ -161,23 +147,6 @@ fn print_compact(results: &[SearchResult]) {
         for ml in &r.match_lines {
             println!("  L{}:\t{}", ml.line, truncate_line(&ml.content, 120));
         }
-    }
-}
-
-fn print_outline(results: &[SearchResult]) {
-    for r in results {
-        let match_nums: Vec<usize> = r.match_lines.iter().map(|m| m.line).collect();
-        let sig = extract_signature_near(&r.chunk.content, r.chunk.start_line, &match_nums)
-            .unwrap_or_else(|| format!("(lines {}-{})", r.chunk.start_line, r.chunk.end_line));
-        let match_suffix = if r.match_lines.is_empty() {
-            String::new()
-        } else {
-            format!(" [{}m]", r.match_lines.len())
-        };
-        println!(
-            "{:.4} {}:{}-{}{}\n  {}",
-            r.score, r.chunk.file_path, r.chunk.start_line, r.chunk.end_line, match_suffix, sig
-        );
     }
 }
 
@@ -241,30 +210,6 @@ fn truncate_line(line: &str, max_len: usize) -> String {
     }
     let s: String = trimmed.chars().take(max_len - 3).collect();
     format!("{s}...")
-}
-
-fn print_json_stripped(results: &[SearchResult]) {
-    let stripped: Vec<SearchResult> = results
-        .iter()
-        .map(|r| {
-            let lang = r.chunk.language.as_deref();
-            SearchResult {
-                chunk: semble::types::Chunk::new(
-                    smart_strip(&r.chunk.content, lang),
-                    r.chunk.file_path.clone(),
-                    r.chunk.start_line,
-                    r.chunk.end_line,
-                    r.chunk.language.clone(),
-                ),
-                score: r.score,
-                match_lines: r.match_lines.clone(),
-            }
-        })
-        .collect();
-    println!(
-        "{}",
-        serde_json::to_string(&stripped).unwrap_or_else(|_| "[]".to_string())
-    );
 }
 
 fn print_json(results: &[SearchResult]) {
