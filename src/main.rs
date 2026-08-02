@@ -3,8 +3,10 @@ use std::process;
 use clap::{Parser, Subcommand};
 
 use semble::format::format_results;
+use semble::index::chunking::DESIRED_CHUNK_LENGTH_CHARS;
 use semble::index::encoder::StaticEncoder;
 use semble::index::{IndexParams, SembleIndex};
+use semble::search::ranking::{ALPHA_NL, ALPHA_SYMBOL};
 use semble::search::SearchParams;
 use semble::types::SearchResult;
 
@@ -39,10 +41,10 @@ enum Commands {
         #[arg(long)]
         alpha: Option<f64>,
         /// Adaptive semantic weight for symbol shaped queries when alpha is unset
-        #[arg(long, default_value_t = 0.3)]
+        #[arg(long, default_value_t = ALPHA_SYMBOL)]
         alpha_symbol: f64,
         /// Adaptive semantic weight for natural language queries when alpha is unset
-        #[arg(long, default_value_t = 0.5)]
+        #[arg(long, default_value_t = ALPHA_NL)]
         alpha_nl: f64,
         /// Reciprocal rank fusion constant
         #[arg(long, default_value_t = 60.0)]
@@ -57,7 +59,7 @@ enum Commands {
         #[arg(long, default_value_t = 5)]
         candidates: usize,
         /// Target chunk size in characters at index time
-        #[arg(long, default_value_t = 1500)]
+        #[arg(long, default_value_t = DESIRED_CHUNK_LENGTH_CHARS)]
         chunk_size: usize,
         /// Skip files larger than this many bytes at index time
         #[arg(long, default_value_t = 1_000_000)]
