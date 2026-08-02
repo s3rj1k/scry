@@ -75,20 +75,6 @@ pub fn file_types() -> Vec<(&'static str, FileType)> {
             },
         ),
         (
-            ".kt",
-            FileType {
-                language: "kotlin",
-                category: FileCategory::Code,
-            },
-        ),
-        (
-            ".kts",
-            FileType {
-                language: "kotlin",
-                category: FileCategory::Code,
-            },
-        ),
-        (
             ".rb",
             FileType {
                 language: "ruby",

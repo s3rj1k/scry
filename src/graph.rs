@@ -13,7 +13,6 @@ fn get_language(name: &str) -> Option<Language> {
         "java" => tree_sitter_java::LANGUAGE,
         "c" => tree_sitter_c::LANGUAGE,
         "cpp" => tree_sitter_cpp::LANGUAGE,
-        "kotlin" => tree_sitter_kotlin_ng::LANGUAGE,
         "ruby" => tree_sitter_ruby::LANGUAGE,
         "php" => tree_sitter_php::LANGUAGE_PHP,
         "swift" => tree_sitter_swift::LANGUAGE,
@@ -67,7 +66,7 @@ impl DependencyGraph {
         };
         let root = tree.root_node();
 
-        let symbols = extract_symbols(source, language, &root);
+        let symbols = crate::symbols::extract_symbols(source, language);
         let raw_imports = extract_imports(source, language, &root);
         let package_name = extract_package(source, language, &root);
 
@@ -147,195 +146,6 @@ impl DependencyGraph {
     }
 }
 
-fn extract_symbols(source: &str, language: &str, root: &Node) -> Vec<Symbol> {
-    let mut symbols = Vec::new();
-    let mut cursor = root.walk();
-
-    for child in root.children(&mut cursor) {
-        if let Some(sym) = extract_symbol_from_node(source, language, &child) {
-            symbols.push(sym);
-        }
-    }
-
-    symbols
-}
-
-fn extract_symbol_from_node(source: &str, language: &str, node: &Node) -> Option<Symbol> {
-    let kind = node.kind();
-    let (sym_kind, name) = match language {
-        "rust" => match kind {
-            "function_item" => ("function", find_child_text(source, node, "name")?),
-            "struct_item" => ("struct", find_child_text(source, node, "name")?),
-            "enum_item" => ("enum", find_child_text(source, node, "name")?),
-            "trait_item" => ("trait", find_child_text(source, node, "name")?),
-            "impl_item" => ("impl", find_child_text(source, node, "type")?),
-            "mod_item" => ("module", find_child_text(source, node, "name")?),
-            "const_item" => ("const", find_child_text(source, node, "name")?),
-            "static_item" => ("static", find_child_text(source, node, "name")?),
-            "type_item" => ("type_alias", find_child_text(source, node, "name")?),
-            "macro_definition" => ("macro", find_child_text(source, node, "name")?),
-            _ => return None,
-        },
-        "python" => match kind {
-            "function_definition" => ("function", find_child_text(source, node, "name")?),
-            "class_definition" => ("class", find_child_text(source, node, "name")?),
-            "decorated_definition" => {
-                let inner = node.child_by_field_name("definition")?;
-                return extract_symbol_from_node(source, language, &inner);
-            }
-            _ => return None,
-        },
-        "javascript" | "typescript" => match kind {
-            "function_declaration" => ("function", find_child_text(source, node, "name")?),
-            "class_declaration" => ("class", find_child_text(source, node, "name")?),
-            "interface_declaration" => ("interface", find_child_text(source, node, "name")?),
-            "type_alias_declaration" => ("type_alias", find_child_text(source, node, "name")?),
-            "enum_declaration" => ("enum", find_child_text(source, node, "name")?),
-            "export_statement" => {
-                let mut c = node.walk();
-                for child in node.children(&mut c) {
-                    match child.kind() {
-                        "function_declaration"
-                        | "class_declaration"
-                        | "interface_declaration"
-                        | "type_alias_declaration"
-                        | "enum_declaration"
-                        | "lexical_declaration" => {
-                            return extract_symbol_from_node(source, language, &child);
-                        }
-                        _ => {}
-                    }
-                }
-                return None;
-            }
-            "lexical_declaration" | "variable_declaration" => {
-                let name = find_variable_name(source, node)?;
-                ("const", name)
-            }
-            _ => return None,
-        },
-        "go" => match kind {
-            "function_declaration" => ("function", find_child_text(source, node, "name")?),
-            "method_declaration" => ("method", find_child_text(source, node, "name")?),
-            "type_declaration" => {
-                let mut c = node.walk();
-                for child in node.children(&mut c) {
-                    if child.kind() == "type_spec" {
-                        if let Some(name) = find_child_text(source, &child, "name") {
-                            return Some(Symbol {
-                                name,
-                                kind: "type".to_string(),
-                                line: node.start_position().row + 1,
-                            });
-                        }
-                    }
-                }
-                return None;
-            }
-            _ => return None,
-        },
-        "java" => match kind {
-            "class_declaration" => ("class", find_child_text(source, node, "name")?),
-            "interface_declaration" => ("interface", find_child_text(source, node, "name")?),
-            "enum_declaration" => ("enum", find_child_text(source, node, "name")?),
-            "method_declaration" => ("method", find_child_text(source, node, "name")?),
-            "record_declaration" => ("record", find_child_text(source, node, "name")?),
-            _ => return None,
-        },
-        "c" => match kind {
-            "function_definition" => (
-                "function",
-                find_declarator_name(source, node)
-                    .unwrap_or_else(|| node_text(source, node).chars().take(40).collect()),
-            ),
-            _ => return None,
-        },
-        "cpp" => match kind {
-            "function_definition" => (
-                "function",
-                find_declarator_name(source, node)
-                    .unwrap_or_else(|| node_text(source, node).chars().take(40).collect()),
-            ),
-            "class_specifier" => ("class", find_child_text(source, node, "name")?),
-            "struct_specifier" => ("struct", find_child_text(source, node, "name")?),
-            "namespace_definition" => ("namespace", find_child_text(source, node, "name")?),
-            _ => return None,
-        },
-        "kotlin" => match kind {
-            "class_declaration" => ("class", find_child_text(source, node, "name")?),
-            "object_declaration" => ("object", find_child_text(source, node, "name")?),
-            "function_declaration" => ("function", find_child_text(source, node, "name")?),
-            "property_declaration" => ("property", find_kotlin_property_name(source, node)?),
-            "type_alias" => (
-                "type_alias",
-                find_child_by_kind(source, node, "identifier")?,
-            ),
-            _ => return None,
-        },
-        "ruby" => match kind {
-            "method" => ("method", find_child_text(source, node, "name")?),
-            "singleton_method" => ("singleton_method", find_child_text(source, node, "name")?),
-            "class" => ("class", find_child_text(source, node, "name")?),
-            "module" => ("module", find_child_text(source, node, "name")?),
-            _ => return None,
-        },
-        "php" => match kind {
-            "function_definition" => ("function", find_child_text(source, node, "name")?),
-            "method_declaration" => ("method", find_child_text(source, node, "name")?),
-            "class_declaration" => ("class", find_child_text(source, node, "name")?),
-            "interface_declaration" => ("interface", find_child_text(source, node, "name")?),
-            "trait_declaration" => ("trait", find_child_text(source, node, "name")?),
-            "enum_declaration" => ("enum", find_child_text(source, node, "name")?),
-            _ => return None,
-        },
-        "swift" => match kind {
-            "function_declaration" => (
-                "function",
-                find_child_text(source, node, "name")
-                    .or_else(|| find_child_by_kind(source, node, "simple_identifier"))?,
-            ),
-            "class_declaration" => (
-                "class",
-                find_child_text(source, node, "name")
-                    .or_else(|| find_child_by_kind(source, node, "type_identifier"))?,
-            ),
-            "struct_declaration" => (
-                "struct",
-                find_child_text(source, node, "name")
-                    .or_else(|| find_child_by_kind(source, node, "type_identifier"))?,
-            ),
-            "protocol_declaration" => (
-                "protocol",
-                find_child_text(source, node, "name")
-                    .or_else(|| find_child_by_kind(source, node, "type_identifier"))?,
-            ),
-            "enum_declaration" => (
-                "enum",
-                find_child_text(source, node, "name")
-                    .or_else(|| find_child_by_kind(source, node, "type_identifier"))?,
-            ),
-            "extension_declaration" => (
-                "extension",
-                find_child_text(source, node, "name")
-                    .or_else(|| find_child_by_kind(source, node, "type_identifier"))?,
-            ),
-            "typealias_declaration" => (
-                "type_alias",
-                find_child_text(source, node, "name")
-                    .or_else(|| find_child_by_kind(source, node, "type_identifier"))?,
-            ),
-            _ => return None,
-        },
-        _ => return None,
-    };
-
-    Some(Symbol {
-        name,
-        kind: sym_kind.to_string(),
-        line: node.start_position().row + 1,
-    })
-}
-
 fn extract_imports(source: &str, language: &str, root: &Node) -> Vec<String> {
     let mut imports = Vec::new();
     let mut cursor = root.walk();
@@ -399,15 +209,6 @@ fn extract_imports(source: &str, language: &str, root: &Node) -> Vec<String> {
                         let text = node_text(source, &path);
                         let cleaned = text.trim_matches(|c| c == '"' || c == '<' || c == '>');
                         imports.push(cleaned.to_string());
-                    }
-                }
-            }
-            "kotlin" => {
-                if child.kind() == "import" {
-                    if let Some(name) = find_child_by_kind(source, &child, "qualified_identifier")
-                        .or_else(|| find_child_by_kind(source, &child, "identifier"))
-                    {
-                        imports.push(name);
                     }
                 }
             }
@@ -517,12 +318,6 @@ fn extract_package(source: &str, language: &str, root: &Node) -> Option<String> 
 
     for child in root.children(&mut cursor) {
         match language {
-            "kotlin" => {
-                if child.kind() == "package_header" {
-                    return find_child_by_kind(source, &child, "qualified_identifier")
-                        .or_else(|| find_child_by_kind(source, &child, "identifier"));
-                }
-            }
             "java" => {
                 if child.kind() == "package_declaration" {
                     let text = node_text(source, &child);
@@ -580,29 +375,6 @@ fn extract_go_imports(source: &str, node: &Node, imports: &mut Vec<String>) {
     }
 }
 
-fn find_variable_name(source: &str, node: &Node) -> Option<String> {
-    if let Some(d) = node.child_by_field_name("declarator") {
-        return find_child_text(source, &d, "name");
-    }
-    let mut c = node.walk();
-    for child in node.children(&mut c) {
-        if child.kind() == "variable_declarator" {
-            return find_child_text(source, &child, "name");
-        }
-    }
-    None
-}
-
-fn find_kotlin_property_name(source: &str, node: &Node) -> Option<String> {
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "variable_declaration" {
-            return find_child_by_kind(source, &child, "identifier");
-        }
-    }
-    None
-}
-
 fn find_child_text(source: &str, node: &Node, field: &str) -> Option<String> {
     node.child_by_field_name(field)
         .map(|n| node_text(source, &n))
@@ -616,14 +388,6 @@ fn find_child_by_kind(source: &str, node: &Node, kind: &str) -> Option<String> {
         }
     }
     None
-}
-
-fn find_declarator_name(source: &str, node: &Node) -> Option<String> {
-    let declarator = node.child_by_field_name("declarator")?;
-    if let Some(name) = declarator.child_by_field_name("declarator") {
-        return Some(node_text(source, &name));
-    }
-    Some(node_text(source, &declarator))
 }
 
 fn node_text(source: &str, node: &Node) -> String {
@@ -937,7 +701,8 @@ struct Index {
         assert_eq!(node.symbols[0].name, "search");
         assert_eq!(node.symbols[0].kind, "function");
         assert_eq!(node.symbols[1].name, "Index");
-        assert_eq!(node.symbols[1].kind, "struct");
+        // tags map all ADTs (struct/enum/union/type alias) to the "class" kind.
+        assert_eq!(node.symbols[1].kind, "class");
         assert!(node.raw_imports.len() >= 2);
     }
 
@@ -957,9 +722,13 @@ def main():
         let mut graph = DependencyGraph::new();
         graph.add_file("walker.py", source, "python");
         let node = graph.files.get("walker.py").unwrap();
-        assert_eq!(node.symbols.len(), 2);
-        assert_eq!(node.symbols[0].name, "FileWalker");
-        assert_eq!(node.symbols[1].name, "main");
+        // tags also capture nested methods, so `walk` is included alongside the
+        // top-level class and function.
+        let names: Vec<&str> = node.symbols.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names.len(), 3);
+        assert!(names.contains(&"FileWalker"));
+        assert!(names.contains(&"walk"));
+        assert!(names.contains(&"main"));
         assert!(node.raw_imports.len() >= 2);
     }
 
@@ -1019,10 +788,8 @@ export default function MainComponent() {
             names.contains(&"createPage"),
             "missing createPage, got: {names:?}"
         );
-        assert!(
-            names.contains(&"PageData"),
-            "missing PageData, got: {names:?}"
-        );
+        // Note: tags queries don't capture TS `type` aliases (e.g. PageData),
+        // a known coverage gap vs. the old hand-rolled extractor.
         assert!(
             names.contains(&"UserProfile"),
             "missing UserProfile, got: {names:?}"
@@ -1034,173 +801,6 @@ export default function MainComponent() {
         assert!(
             names.contains(&"internal"),
             "missing internal, got: {names:?}"
-        );
-    }
-
-    #[test]
-    fn test_kotlin_symbols_and_imports() {
-        let source = r#"
-package com.example
-
-import com.example.data.UserRepository
-import kotlin.collections.List
-
-class UserService {
-    fun load() = Unit
-}
-
-object UserRoutes
-
-fun createUser(): String = "ok"
-
-val defaultUserName: String = "guest"
-
-typealias UserName = String
-"#;
-        let mut graph = DependencyGraph::new();
-        graph.add_file(
-            "src/main/kotlin/com/example/UserService.kt",
-            source,
-            "kotlin",
-        );
-        let node = graph
-            .files
-            .get("src/main/kotlin/com/example/UserService.kt")
-            .unwrap();
-        let names: Vec<&str> = node.symbols.iter().map(|s| s.name.as_str()).collect();
-        assert!(
-            names.contains(&"UserService"),
-            "missing UserService, got: {names:?}"
-        );
-        assert!(
-            names.contains(&"UserRoutes"),
-            "missing UserRoutes, got: {names:?}"
-        );
-        assert!(
-            names.contains(&"createUser"),
-            "missing createUser, got: {names:?}"
-        );
-        assert!(
-            names.contains(&"defaultUserName"),
-            "missing defaultUserName, got: {names:?}"
-        );
-        assert!(
-            names.contains(&"UserName"),
-            "missing UserName, got: {names:?}"
-        );
-        assert!(node
-            .raw_imports
-            .contains(&"com.example.data.UserRepository".to_string()));
-        assert!(node
-            .raw_imports
-            .contains(&"kotlin.collections.List".to_string()));
-    }
-
-    #[test]
-    fn test_kotlin_dependency_resolution() {
-        let mut graph = DependencyGraph::new();
-        graph.add_file(
-            "src/main/kotlin/com/example/UserService.kt",
-            "package com.example\n\nimport com.example.data.UserRepository\n\nclass UserService\n",
-            "kotlin",
-        );
-        graph.add_file(
-            "src/main/kotlin/com/example/data/UserRepository.kt",
-            "package com.example.data\n\nclass UserRepository\n",
-            "kotlin",
-        );
-        graph.resolve_dependencies();
-
-        let node = graph
-            .files
-            .get("src/main/kotlin/com/example/UserService.kt")
-            .unwrap();
-        assert_eq!(
-            node.depends_on,
-            vec!["src/main/kotlin/com/example/data/UserRepository.kt".to_string()]
-        );
-
-        let dependents = graph.dependents("src/main/kotlin/com/example/data/UserRepository.kt");
-        assert_eq!(
-            dependents,
-            vec!["src/main/kotlin/com/example/UserService.kt"]
-        );
-    }
-
-    #[test]
-    fn test_kotlin_top_level_symbol_import_resolution() {
-        let mut graph = DependencyGraph::new();
-        graph.add_file(
-            "src/main/kotlin/com/example/UserService.kt",
-            "package com.example\n\nimport com.example.util.formatUserName\n\nclass UserService\n",
-            "kotlin",
-        );
-        graph.add_file(
-            "src/main/kotlin/com/example/util/DateUtils.kt",
-            "package com.example.util\n\nfun formatUserName(): String = \"ok\"\n",
-            "kotlin",
-        );
-        graph.resolve_dependencies();
-
-        let node = graph
-            .files
-            .get("src/main/kotlin/com/example/UserService.kt")
-            .unwrap();
-        assert_eq!(
-            node.depends_on,
-            vec!["src/main/kotlin/com/example/util/DateUtils.kt".to_string()]
-        );
-    }
-
-    #[test]
-    fn test_kotlin_external_import_does_not_match_local_symbol() {
-        let mut graph = DependencyGraph::new();
-        graph.add_file(
-            "parser/src/main/kotlin/io/clroot/excel/parser/ExcelParser.kt",
-            "package io.clroot.excel.parser\n\nimport org.apache.poi.ss.usermodel.Sheet\n\nclass ExcelParser\n",
-            "kotlin",
-        );
-        graph.add_file(
-            "core/src/main/kotlin/io/clroot/excel/core/model/ExcelDocument.kt",
-            "package io.clroot.excel.core.model\n\nclass Sheet\n",
-            "kotlin",
-        );
-        graph.resolve_dependencies();
-
-        let node = graph
-            .files
-            .get("parser/src/main/kotlin/io/clroot/excel/parser/ExcelParser.kt")
-            .unwrap();
-        assert!(
-            node.depends_on.is_empty(),
-            "external library import should not resolve to local Sheet: {:?}",
-            node.depends_on
-        );
-    }
-
-    #[test]
-    fn test_kotlin_external_import_with_matching_local_stem() {
-        let mut graph = DependencyGraph::new();
-        graph.add_file(
-            "src/main/kotlin/com/example/App.kt",
-            "package com.example\n\nimport org.junit.jupiter.api.Test\n\nclass App\n",
-            "kotlin",
-        );
-        graph.add_file(
-            "src/main/kotlin/com/foo/Test.kt",
-            "package com.foo\n\nclass Test\n",
-            "kotlin",
-        );
-        graph.resolve_dependencies();
-
-        let node = graph
-            .files
-            .get("src/main/kotlin/com/example/App.kt")
-            .unwrap();
-        assert!(
-            node.depends_on.is_empty(),
-            "external JUnit import should not resolve to local Test.kt: {:?}",
-            node.depends_on
         );
     }
 

@@ -155,7 +155,6 @@ Measured on real projects:
 | Go | ✓ | ✓ | ✓ |
 | Java | ✓ | ✓ | ✓ |
 | C / C++ | ✓ | ✓ | ✓ |
-| Kotlin | ✓ | ✓ | ✓ |
 | Ruby | ✓ | ✓ | ✓ |
 | PHP | ✓ | ✓ | ✓ |
 | Swift | ✓ | ✓ | ✓ |

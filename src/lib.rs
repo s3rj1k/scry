@@ -8,6 +8,7 @@ pub mod index;
 pub mod outline;
 pub mod ranking;
 pub mod search;
+pub mod symbols;
 pub mod tokens;
 pub mod types;
 pub mod utils;

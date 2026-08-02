@@ -15,7 +15,6 @@ fn get_language(name: &str) -> Option<Language> {
         "java" => tree_sitter_java::LANGUAGE,
         "c" => tree_sitter_c::LANGUAGE,
         "cpp" => tree_sitter_cpp::LANGUAGE,
-        "kotlin" => tree_sitter_kotlin_ng::LANGUAGE,
         "ruby" => tree_sitter_ruby::LANGUAGE,
         "php" => tree_sitter_php::LANGUAGE_PHP,
         "swift" => tree_sitter_swift::LANGUAGE,
@@ -182,52 +181,23 @@ func helper() int {
     }
 
     #[test]
-    fn test_kotlin_tree_sitter_chunking_small() {
-        let source = r#"
-package com.example
-
-import kotlin.collections.List
-
-class Foo {
-    fun bar() = 42
-}
-
-object Singleton {
-    val x: Int = 1
-}
-
-fun topLevel(): String = "hi"
-
-typealias Name = String
-"#;
-        let chunks = chunk_source(source, "Foo.kt", Some("kotlin"));
-        assert!(!chunks.is_empty());
-        let all_content: String = chunks.iter().map(|c| c.content.as_str()).collect();
-        assert!(all_content.contains("class Foo"));
-        assert!(all_content.contains("object Singleton"));
-        assert!(all_content.contains("fun topLevel"));
-        assert!(all_content.contains("typealias Name"));
-    }
-
-    #[test]
     fn test_large_source_splits_and_preserves_content() {
-        let body = "    val x = 1\n".repeat(80);
-        let source =
-            format!("class A {{\n{body}}}\n\nclass B {{\n{body}}}\n\nclass C {{\n{body}}}\n");
-        let chunks = chunk_source(&source, "Big.kt", Some("kotlin"));
+        let body = "    let _x = 1;\n".repeat(80);
+        let source = format!("fn a() {{\n{body}}}\n\nfn b() {{\n{body}}}\n\nfn c() {{\n{body}}}\n");
+        let chunks = chunk_source(&source, "big.rs", Some("rust"));
         assert!(
             chunks.len() >= 2,
             "large source should split: got {} chunks",
             chunks.len()
         );
         let all_content: String = chunks.iter().map(|c| c.content.as_str()).collect();
-        assert!(all_content.contains("class A"));
-        assert!(all_content.contains("class B"));
-        assert!(all_content.contains("class C"));
+        assert!(all_content.contains("fn a"));
+        assert!(all_content.contains("fn b"));
+        assert!(all_content.contains("fn c"));
         // The whole file should not collapse into a single chunk.
-        assert!(!chunks.iter().any(|c| c.content.contains("class A")
-            && c.content.contains("class B")
-            && c.content.contains("class C")));
+        assert!(!chunks.iter().any(|c| c.content.contains("fn a")
+            && c.content.contains("fn b")
+            && c.content.contains("fn c")));
     }
 
     #[test]
