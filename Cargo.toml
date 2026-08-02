@@ -42,6 +42,6 @@ tree-sitter-cpp = "0.23"
 tree-sitter-ruby = "0.23"
 tree-sitter-php = "0.24"
 tree-sitter-swift = "0.7"
-model2vec-rs = "0.2.1"
+model2vec-rs = { version = "0.2.1", default-features = false, features = ["local-only", "fancy-regex"] }
 text-splitter = { version = "0.32", features = ["code"] }
 tree-sitter-tags = "0.26.11"
