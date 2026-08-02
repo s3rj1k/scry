@@ -42,9 +42,9 @@ impl StaticEncoder {
 }
 
 /// Resolve `name_or_path` to a local model directory without any network
-/// access. Search order: an explicit local directory, `SCRY_MODEL_PATH`, the
-/// Hugging Face hub cache, the current directory, then the scry binary's
-/// directory. Errors listing where it looked when nothing matches.
+/// access. Search order is an explicit local directory, then `SCRY_MODEL_PATH`,
+/// then the Hugging Face hub cache. Errors list where it looked when nothing
+/// matches.
 fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
     // A directory the caller points at directly wins; the loader validates it.
     if Path::new(name_or_path).is_dir() {
@@ -52,7 +52,6 @@ fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
     }
 
     let mut searched: Vec<PathBuf> = Vec::new();
-    let bare = name_or_path.rsplit('/').next().unwrap_or(name_or_path);
 
     if let Some(dir) = std::env::var_os("SCRY_MODEL_PATH").map(PathBuf::from) {
         if is_model_dir(&dir) {
@@ -71,26 +70,6 @@ fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
         }
     }
 
-    // Working directory and the binary's directory, under both the full
-    // "org/name" id and the bare model name.
-    let mut roots: Vec<PathBuf> = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        roots.push(cwd);
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            roots.push(dir.to_path_buf());
-        }
-    }
-    for root in roots {
-        for cand in [root.join(name_or_path), root.join(bare)] {
-            if is_model_dir(&cand) {
-                return Ok(cand);
-            }
-            searched.push(cand);
-        }
-    }
-
     let looked = searched
         .iter()
         .map(|p| format!("  {}", p.display()))
@@ -98,10 +77,9 @@ fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
         .join("\n");
     bail!(
         "Embedding model {name_or_path:?} not found locally, and scry never \
-         downloads from the network.\nLooked in:\n{looked}\n\nFetch it into one \
-         of those locations, e.g.:\n  huggingface-cli download {name_or_path} \
-         --local-dir ./{bare}\nor point at an existing copy with `--model <dir>` \
-         or `SCRY_MODEL_PATH=<dir>`."
+         downloads from the network.\nLooked in:\n{looked}\n\nFetch it into the \
+         Hugging Face cache with:\n  huggingface-cli download {name_or_path}\nor \
+         point at an existing copy with `--model <dir>` or `SCRY_MODEL_PATH=<dir>`."
     )
 }
 

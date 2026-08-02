@@ -17,6 +17,16 @@ git clone https://github.com/s3rj1k/scry.git && cd scry
 cargo install --path .
 ```
 
+## Model
+
+Scry never downloads models. Install the default embedder into the Hugging Face cache once:
+
+```bash
+huggingface-cli download minishlab/potion-code-16M-v2
+```
+
+Or point at a local model directory with `--model <dir>` or `SCRY_MODEL_PATH`.
+
 ## Flow
 
 Intent to structure:

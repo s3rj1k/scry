@@ -83,7 +83,7 @@ enum Commands {
         #[arg(long, default_value_t = 3)]
         max_match_lines: usize,
         /// Embedding model, a Hugging Face repo id or a local path. Resolved
-        /// locally (HF cache, cwd, binary dir) and never downloaded.
+        /// locally from the HF cache, never downloaded.
         #[arg(long, default_value = "minishlab/potion-code-16M-v2")]
         model: String,
     },
