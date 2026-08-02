@@ -106,9 +106,9 @@ The embedder is fully static (vocab embedding lookup → mean pool → SIF weigh
 
 ## Benchmarks
 
-### Retrieval quality — 100-query benchmark (this repo)
+### Retrieval quality — 90-query benchmark (this repo)
 
-100 hand-labelled queries across 5 categories: exact symbol names, natural-language feature descriptions, scenarios, acronyms, and Korean queries. Default model `minishlab/potion-code-16M`.
+90 hand-labelled queries across 4 categories: exact symbol names, natural-language feature descriptions, scenarios, and acronyms. Default model `minishlab/potion-code-16M`.
 
 | Metric | Score |
 | --- | --- |

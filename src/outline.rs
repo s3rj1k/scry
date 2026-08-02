@@ -141,10 +141,10 @@ fn collect_signature(lines: &[&str], start: usize) -> String {
         {
             break;
         }
-        // 함수 시그니처가 한 줄에 완성된 경우 (paren 닫혔고 다른 종결자 없어도 OK)
+        // Signature that completes on one line (parens closed, no other terminator).
         if paren_depth <= 0 && count == 1 && (trimmed.contains("->") || trimmed.ends_with(')')) {
-            // 더 합칠 라인이 없을 수 있으니 다음 라인을 한 번만 더 보고 break
-            // (e.g., `pub fn foo(x: T)` 다음 줄이 `-> R {` 일 수 있음)
+            // There may be more to join, so peek one more line before breaking
+            // (e.g. `pub fn foo(x: T)` may be followed by `-> R {`).
             continue;
         }
         if paren_depth <= 0 && count > 1 && !combined.trim_end().ends_with(',') {
