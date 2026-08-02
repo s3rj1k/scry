@@ -4,15 +4,14 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 
 use crate::index::bm25::Bm25Index;
-use crate::index::chunking::chunk_source;
+use crate::index::chunking::chunk_source_sized;
 use crate::index::encoder::{SemanticIndex, StaticEncoder};
 use crate::index::file_walker::{filter_extensions, language_for_path, walk_files};
 use crate::index::symbols::extract_symbols;
+use crate::index::IndexParams;
 use crate::types::Chunk;
 
-const MAX_FILE_BYTES: u64 = 1_000_000;
-
-fn enrich_for_bm25(chunk: &Chunk) -> String {
+fn enrich_for_bm25(chunk: &Chunk, params: &IndexParams) -> String {
     let path = Path::new(&chunk.file_path);
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     let dir_parts: Vec<&str> = path
@@ -33,12 +32,13 @@ fn enrich_for_bm25(chunk: &Chunk) -> String {
     let dir_text: String = dir_parts
         .iter()
         .rev()
-        .take(3)
+        .take(params.bm25_dir_parts)
         .rev()
         .cloned()
         .collect::<Vec<_>>()
         .join(" ");
-    format!("{} {stem} {stem} {dir_text}", chunk.content)
+    let stem_tokens = vec![stem; params.bm25_stem_repeat].join(" ");
+    format!("{} {stem_tokens} {dir_text}", chunk.content)
 }
 
 pub fn create_index_from_path(
@@ -48,6 +48,7 @@ pub fn create_index_from_path(
     ignore: Option<&HashSet<String>>,
     include_text_files: bool,
     display_root: &Path,
+    params: &IndexParams,
 ) -> Result<(Bm25Index, SemanticIndex, Vec<Chunk>)> {
     let exts = filter_extensions(extensions, include_text_files);
     let files = walk_files(path, &exts, ignore);
@@ -59,7 +60,7 @@ pub fn create_index_from_path(
             Ok(m) => m,
             Err(_) => continue,
         };
-        if metadata.len() > MAX_FILE_BYTES {
+        if metadata.len() > params.max_file_bytes {
             continue;
         }
         let source = match std::fs::read_to_string(file_path) {
@@ -73,7 +74,7 @@ pub fn create_index_from_path(
             .to_string_lossy()
             .to_string();
 
-        let mut file_chunks = chunk_source(&source, &chunk_path, language);
+        let mut file_chunks = chunk_source_sized(&source, &chunk_path, language, params.chunk_size);
 
         // Attach the AST symbols each chunk defines (tag based) so ranking can
         // detect definitions structurally.
@@ -101,7 +102,7 @@ pub fn create_index_from_path(
         .context("Failed to encode chunks")?;
     let semantic_index = SemanticIndex::new(embeddings);
 
-    let bm25_docs: Vec<String> = chunks.iter().map(enrich_for_bm25).collect();
+    let bm25_docs: Vec<String> = chunks.iter().map(|c| enrich_for_bm25(c, params)).collect();
     let bm25_index = Bm25Index::new(&bm25_docs);
 
     Ok((bm25_index, semantic_index, chunks))

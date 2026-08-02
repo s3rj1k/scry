@@ -12,11 +12,34 @@ use anyhow::{bail, Context, Result};
 
 use crate::index::bm25::Bm25Index;
 use crate::index::encoder::{SemanticIndex, StaticEncoder};
-use crate::search::search_hybrid;
+use crate::search::{search_hybrid, SearchParams};
 use crate::types::{Chunk, IndexStats, SearchResult};
 use create::create_index_from_path;
 
 use std::collections::HashSet;
+
+/// Tunable knobs for building the index. Defaults match the built in values.
+pub struct IndexParams {
+    /// Target chunk size in characters.
+    pub chunk_size: usize,
+    /// Skip files larger than this many bytes.
+    pub max_file_bytes: u64,
+    /// Repeat the file stem this many times so names weigh above body tokens.
+    pub bm25_stem_repeat: usize,
+    /// Keep at most this many trailing directory names as extra BM25 tokens.
+    pub bm25_dir_parts: usize,
+}
+
+impl Default for IndexParams {
+    fn default() -> Self {
+        Self {
+            chunk_size: chunking::DESIRED_CHUNK_LENGTH_CHARS,
+            max_file_bytes: 1_000_000,
+            bm25_stem_repeat: 2,
+            bm25_dir_parts: 3,
+        }
+    }
+}
 
 pub struct SembleIndex {
     encoder: StaticEncoder,
@@ -36,6 +59,7 @@ impl SembleIndex {
         extensions: Option<&HashSet<String>>,
         ignore: Option<&HashSet<String>>,
         include_text_files: bool,
+        index_params: &IndexParams,
     ) -> Result<Self> {
         let path = path.as_ref();
         if !path.exists() {
@@ -57,6 +81,7 @@ impl SembleIndex {
             ignore,
             include_text_files,
             &path,
+            index_params,
         )?;
 
         let (file_mapping, language_mapping) = build_mappings(&chunks);
@@ -76,7 +101,7 @@ impl SembleIndex {
         &self,
         query: &str,
         top_k: usize,
-        alpha: Option<f64>,
+        params: &SearchParams,
         filter_languages: Option<&[String]>,
         filter_paths: Option<&[String]>,
     ) -> Vec<SearchResult> {
@@ -94,7 +119,7 @@ impl SembleIndex {
             &self.bm25_index,
             &self.chunks,
             top_k,
-            alpha,
+            params,
             selector_ref,
         )
     }

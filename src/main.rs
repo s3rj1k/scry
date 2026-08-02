@@ -4,7 +4,8 @@ use clap::{Parser, Subcommand};
 
 use semble::format::{format_results, resolve_chunk};
 use semble::index::encoder::StaticEncoder;
-use semble::index::SembleIndex;
+use semble::index::{IndexParams, SembleIndex};
+use semble::search::SearchParams;
 use semble::types::SearchResult;
 
 #[derive(Parser)]
@@ -37,6 +38,36 @@ enum Commands {
         /// Omitted, it adapts to the query shape.
         #[arg(long)]
         alpha: Option<f64>,
+        /// Adaptive semantic weight for symbol shaped queries when alpha is unset
+        #[arg(long, default_value_t = 0.3)]
+        alpha_symbol: f64,
+        /// Adaptive semantic weight for natural language queries when alpha is unset
+        #[arg(long, default_value_t = 0.5)]
+        alpha_nl: f64,
+        /// Reciprocal rank fusion constant
+        #[arg(long, default_value_t = 60.0)]
+        rrf_k: f64,
+        /// Drop results below this fraction of the top score
+        #[arg(long, default_value_t = 0.12)]
+        min_score_ratio: f64,
+        /// Weight of the definition signal in the fusion
+        #[arg(long, default_value_t = 1.0)]
+        def_weight: f64,
+        /// Candidate pool size as a multiple of top_k
+        #[arg(long, default_value_t = 5)]
+        candidates: usize,
+        /// Target chunk size in characters at index time
+        #[arg(long, default_value_t = 1500)]
+        chunk_size: usize,
+        /// Skip files larger than this many bytes at index time
+        #[arg(long, default_value_t = 1_000_000)]
+        max_file_bytes: u64,
+        /// Repeat the file stem this many times in each BM25 document
+        #[arg(long, default_value_t = 2)]
+        bm25_stem_repeat: usize,
+        /// Trailing directory names added to each BM25 document
+        #[arg(long, default_value_t = 3)]
+        bm25_dir_parts: usize,
         /// Treat the query as a file:line location and return similar chunks
         #[arg(long)]
         related: bool,
@@ -46,9 +77,12 @@ enum Commands {
         /// Compact output with file paths, scores, and match lines only
         #[arg(long)]
         compact: bool,
-        /// Group results by directory + cap match lines at 3 per chunk
+        /// Group results by directory
         #[arg(long)]
         group: bool,
+        /// Match lines shown per chunk in grouped output
+        #[arg(long, default_value_t = 3)]
+        max_match_lines: usize,
         /// Embedding model (HF repo id or local path).
         /// Overrides SEMBLE_MODEL_PATH and the default embedding model.
         #[arg(long)]
@@ -67,10 +101,21 @@ fn main() {
             top_k,
             include_text_files,
             alpha,
+            alpha_symbol,
+            alpha_nl,
+            rrf_k,
+            min_score_ratio,
+            def_weight,
+            candidates,
+            chunk_size,
+            max_file_bytes,
+            bm25_stem_repeat,
+            bm25_dir_parts,
             related,
             json,
             compact,
             group,
+            max_match_lines,
             model,
         } => {
             if let Some(a) = alpha {
@@ -79,7 +124,30 @@ fn main() {
                     process::exit(1);
                 }
             }
-            let index = build_index(&path, include_text_files, model.as_deref());
+            if candidates == 0 {
+                eprintln!("--candidates must be at least 1.");
+                process::exit(1);
+            }
+            if chunk_size == 0 {
+                eprintln!("--chunk-size must be at least 1.");
+                process::exit(1);
+            }
+            let index_params = IndexParams {
+                chunk_size,
+                max_file_bytes,
+                bm25_stem_repeat,
+                bm25_dir_parts,
+            };
+            let search_params = SearchParams {
+                alpha,
+                alpha_symbol,
+                alpha_nl,
+                rrf_k,
+                min_score_ratio,
+                def_weight,
+                candidate_multiplier: candidates,
+            };
+            let index = build_index(&path, include_text_files, model.as_deref(), &index_params);
 
             let results = if related {
                 let (file_path, line) = parse_location(&query).unwrap_or_else(|| {
@@ -94,11 +162,11 @@ fn main() {
                     .clone();
                 index.find_related(&chunk, top_k)
             } else {
-                index.search(query.as_str(), top_k, alpha, None, None)
+                index.search(query.as_str(), top_k, &search_params, None, None)
             };
 
             if group {
-                print_grouped(&results);
+                print_grouped(&results, max_match_lines);
             } else if compact {
                 print_compact(&results);
             } else if json {
@@ -136,7 +204,7 @@ fn print_compact(results: &[SearchResult]) {
     }
 }
 
-fn print_grouped(results: &[SearchResult]) {
+fn print_grouped(results: &[SearchResult], max_match_lines: usize) {
     use std::collections::BTreeMap;
     let mut by_dir: BTreeMap<String, (f64, Vec<&SearchResult>)> = BTreeMap::new();
     for r in results {
@@ -158,7 +226,6 @@ fn print_grouped(results: &[SearchResult]) {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    const MAX_MATCH_LINES: usize = 3;
     for (dir, (_, group)) in dirs {
         let has_dir = !dir.is_empty();
         if has_dir {
@@ -175,15 +242,15 @@ fn print_grouped(results: &[SearchResult]) {
                 r.score, r.chunk.start_line, r.chunk.end_line
             );
             let total = r.match_lines.len();
-            for ml in r.match_lines.iter().take(MAX_MATCH_LINES) {
+            for ml in r.match_lines.iter().take(max_match_lines) {
                 println!(
                     "{indent}  L{}: {}",
                     ml.line,
                     truncate_line(&ml.content, 100)
                 );
             }
-            if total > MAX_MATCH_LINES {
-                println!("{indent}  ... (+{})", total - MAX_MATCH_LINES);
+            if total > max_match_lines {
+                println!("{indent}  ... (+{})", total - max_match_lines);
             }
         }
     }
@@ -205,14 +272,19 @@ fn print_json(results: &[SearchResult]) {
     );
 }
 
-fn build_index(path: &str, include_text_files: bool, model: Option<&str>) -> SembleIndex {
+fn build_index(
+    path: &str,
+    include_text_files: bool,
+    model: Option<&str>,
+    index_params: &IndexParams,
+) -> SembleIndex {
     let encoder = model.map(|m| {
         StaticEncoder::load(Some(m)).unwrap_or_else(|e| {
             eprintln!("Failed to load model {m:?}: {e}");
             process::exit(1);
         })
     });
-    match SembleIndex::from_path(path, encoder, None, None, include_text_files) {
+    match SembleIndex::from_path(path, encoder, None, None, include_text_files, index_params) {
         Ok(idx) => idx,
         Err(e) => {
             eprintln!("Error: {e:?}");

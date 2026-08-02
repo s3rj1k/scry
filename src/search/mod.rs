@@ -5,15 +5,42 @@ use std::collections::HashMap;
 
 use crate::index::bm25::Bm25Index;
 use crate::index::encoder::{SemanticIndex, StaticEncoder};
-use crate::search::ranking::{definition_list, resolve_alpha, weighted_rrf, Signal};
+use crate::search::ranking::{
+    definition_list, resolve_alpha, weighted_rrf, Signal, ALPHA_NL, ALPHA_SYMBOL,
+};
 use crate::types::{Chunk, MatchLine, SearchResult};
 
-const RRF_K: f64 = 60.0;
-const MIN_SCORE_RATIO: f64 = 0.12;
+/// Tunable knobs for the search flow. Defaults match the built in values.
+pub struct SearchParams {
+    /// Semantic weight from 0 to 1. None adapts to the query shape.
+    pub alpha: Option<f64>,
+    /// Adaptive weight for symbol shaped queries when alpha is None.
+    pub alpha_symbol: f64,
+    /// Adaptive weight for natural language queries when alpha is None.
+    pub alpha_nl: f64,
+    /// Reciprocal rank fusion constant.
+    pub rrf_k: f64,
+    /// Drop results scoring below this fraction of the top result.
+    pub min_score_ratio: f64,
+    /// Weight of the definition signal, relative to semantic plus lexical of 1.
+    pub def_weight: f64,
+    /// Candidate pool size as a multiple of top_k.
+    pub candidate_multiplier: usize,
+}
 
-// Weight for the definition signal, relative to the combined semantic plus
-// lexical weight of 1.0. Defining the queried symbol is the strongest signal.
-const W_DEFINITION: f64 = 1.0;
+impl Default for SearchParams {
+    fn default() -> Self {
+        Self {
+            alpha: None,
+            alpha_symbol: ALPHA_SYMBOL,
+            alpha_nl: ALPHA_NL,
+            rrf_k: 60.0,
+            min_score_ratio: 0.12,
+            def_weight: 1.0,
+            candidate_multiplier: 5,
+        }
+    }
+}
 
 fn selector_to_mask(selector: Option<&[usize]>, size: usize) -> Option<Vec<bool>> {
     let indices = selector?;
@@ -49,7 +76,7 @@ fn find_match_lines(chunk: &Chunk, query: &str) -> Vec<MatchLine> {
     matches
 }
 
-fn filter_low_scores(results: Vec<SearchResult>) -> Vec<SearchResult> {
+fn filter_low_scores(results: Vec<SearchResult>, min_ratio: f64) -> Vec<SearchResult> {
     if results.len() <= 1 {
         return results;
     }
@@ -57,7 +84,7 @@ fn filter_low_scores(results: Vec<SearchResult>) -> Vec<SearchResult> {
     if top_score <= 0.0 {
         return Vec::new();
     }
-    let min = top_score * MIN_SCORE_RATIO;
+    let min = top_score * min_ratio;
     results.into_iter().filter(|r| r.score >= min).collect()
 }
 
@@ -106,6 +133,7 @@ pub fn search_bm25(
     chunks: &[Chunk],
     top_k: usize,
     selector: Option<&[usize]>,
+    params: &SearchParams,
 ) -> Vec<SearchResult> {
     let ranked = bm25_ranked(query, bm25_index, chunks, selector, top_k);
     let results: Vec<SearchResult> = ranked
@@ -116,13 +144,13 @@ pub fn search_bm25(
             SearchResult {
                 chunk: chunks[idx].clone(),
                 // Descending pseudo score so ordering and filtering behave.
-                score: 1.0 / (RRF_K + rank as f64 + 1.0),
+                score: 1.0 / (params.rrf_k + rank as f64 + 1.0),
                 match_lines,
             }
         })
         .collect();
 
-    filter_low_scores(results)
+    filter_low_scores(results, params.min_score_ratio)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -133,15 +161,15 @@ pub fn search_hybrid(
     bm25_index: &Bm25Index,
     chunks: &[Chunk],
     top_k: usize,
-    alpha: Option<f64>,
+    params: &SearchParams,
     selector: Option<&[usize]>,
 ) -> Vec<SearchResult> {
-    let alpha_weight = resolve_alpha(query, alpha);
-    let candidate_count = top_k * 5;
+    let alpha_weight = resolve_alpha(query, params.alpha, params.alpha_symbol, params.alpha_nl);
+    let candidate_count = top_k * params.candidate_multiplier;
 
     let query_embedding = match encoder.encode_single(query) {
         Ok(e) => e,
-        Err(_) => return search_bm25(query, bm25_index, chunks, top_k, selector),
+        Err(_) => return search_bm25(query, bm25_index, chunks, top_k, selector, params),
     };
 
     // base ranked lists (natural rankings)
@@ -163,7 +191,7 @@ pub fn search_hybrid(
             Signal::new(alpha_weight, sem_ranked.clone()),
             Signal::new(1.0 - alpha_weight, lex_ranked.clone()),
         ],
-        RRF_K,
+        params.rrf_k,
     );
     let pool: Vec<usize> = sorted_by_score(&base).into_iter().map(|(i, _)| i).collect();
 
@@ -175,9 +203,9 @@ pub fn search_hybrid(
         &[
             Signal::new(alpha_weight, sem_ranked),
             Signal::new(1.0 - alpha_weight, lex_ranked),
-            Signal::new(W_DEFINITION, def_ranked),
+            Signal::new(params.def_weight, def_ranked),
         ],
-        RRF_K,
+        params.rrf_k,
     );
 
     // take the top_k by fused score
@@ -196,5 +224,5 @@ pub fn search_hybrid(
         })
         .collect();
 
-    filter_low_scores(results)
+    filter_low_scores(results, params.min_score_ratio)
 }

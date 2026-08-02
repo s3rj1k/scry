@@ -3,7 +3,7 @@ use tree_sitter::Language;
 
 use crate::types::Chunk;
 
-const DESIRED_CHUNK_LENGTH_CHARS: usize = 1500;
+pub const DESIRED_CHUNK_LENGTH_CHARS: usize = 1500;
 
 fn get_language(name: &str) -> Option<Language> {
     let lang_fn = match name {
@@ -28,20 +28,29 @@ fn collect_indices<'a>(it: impl Iterator<Item = (usize, &'a str)>) -> Vec<(usize
         .collect()
 }
 
-/// Split `source` into chunks capped near `DESIRED_CHUNK_LENGTH_CHARS`. Code
-/// uses tree sitter boundaries, anything else falls back to text splitting.
+/// Split `source` into chunks near the default target length. Code uses tree
+/// sitter boundaries, anything else falls back to text splitting.
 pub fn chunk_source(source: &str, file_path: &str, language: Option<&str>) -> Vec<Chunk> {
+    chunk_source_sized(source, file_path, language, DESIRED_CHUNK_LENGTH_CHARS)
+}
+
+/// Split `source` into chunks capped near `chunk_size` characters. Code uses
+/// tree sitter boundaries, anything else falls back to text splitting.
+pub fn chunk_source_sized(
+    source: &str,
+    file_path: &str,
+    language: Option<&str>,
+    chunk_size: usize,
+) -> Vec<Chunk> {
     if source.trim().is_empty() {
         return Vec::new();
     }
 
     let indexed = language
         .and_then(get_language)
-        .and_then(|lang| CodeSplitter::new(lang, DESIRED_CHUNK_LENGTH_CHARS).ok())
+        .and_then(|lang| CodeSplitter::new(lang, chunk_size).ok())
         .map(|splitter| collect_indices(splitter.chunk_indices(source)))
-        .unwrap_or_else(|| {
-            collect_indices(TextSplitter::new(DESIRED_CHUNK_LENGTH_CHARS).chunk_indices(source))
-        });
+        .unwrap_or_else(|| collect_indices(TextSplitter::new(chunk_size).chunk_indices(source)));
 
     indexed
         .into_iter()
