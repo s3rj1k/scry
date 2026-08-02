@@ -33,6 +33,10 @@ enum Commands {
         /// Also index non code text files like .md, .yaml, .json
         #[arg(long)]
         include_text_files: bool,
+        /// Semantic weight from 0.0 (lexical only) to 1.0 (semantic only).
+        /// Omitted, it adapts to the query shape.
+        #[arg(long)]
+        alpha: Option<f64>,
         /// Treat the query as a file:line location and return similar chunks
         #[arg(long)]
         related: bool,
@@ -62,12 +66,19 @@ fn main() {
             path,
             top_k,
             include_text_files,
+            alpha,
             related,
             json,
             compact,
             group,
             model,
         } => {
+            if let Some(a) = alpha {
+                if !(0.0..=1.0).contains(&a) {
+                    eprintln!("--alpha must be between 0.0 and 1.0, got {a}.");
+                    process::exit(1);
+                }
+            }
             let index = build_index(&path, include_text_files, model.as_deref());
 
             let results = if related {
@@ -83,7 +94,7 @@ fn main() {
                     .clone();
                 index.find_related(&chunk, top_k)
             } else {
-                index.search(query.as_str(), top_k, None, None, None)
+                index.search(query.as_str(), top_k, alpha, None, None)
             };
 
             if group {
