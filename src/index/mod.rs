@@ -55,7 +55,7 @@ pub struct SembleIndex {
 impl SembleIndex {
     pub fn from_path(
         path: impl AsRef<Path>,
-        encoder: Option<StaticEncoder>,
+        encoder: StaticEncoder,
         extensions: Option<&HashSet<String>>,
         ignore: Option<&HashSet<String>>,
         include_text_files: bool,
@@ -69,10 +69,6 @@ impl SembleIndex {
             bail!("Path is not a directory: {}", path.display());
         }
         let path = path.canonicalize().context("Failed to resolve path")?;
-        let encoder = match encoder {
-            Some(e) => e,
-            None => StaticEncoder::load(None).context("Failed to load embedding model")?,
-        };
 
         let (bm25_index, semantic_index, chunks) = create_index_from_path(
             &path,

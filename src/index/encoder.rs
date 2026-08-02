@@ -1,8 +1,8 @@
-use anyhow::{Context, Result};
+use std::path::{Path, PathBuf};
+
+use anyhow::{bail, Context, Result};
 use model2vec_rs::model::StaticModel;
 use ndarray::{Array1, Array2, Axis};
-
-const DEFAULT_MODEL_NAME: &str = "minishlab/potion-code-16M";
 
 pub struct StaticEncoder {
     model: StaticModel,
@@ -10,15 +10,13 @@ pub struct StaticEncoder {
 }
 
 impl StaticEncoder {
-    pub fn load(model_name: Option<&str>) -> Result<Self> {
-        // Priority. Explicit model_name from the CLI, then SEMBLE_MODEL_PATH env, then default.
-        let path_or_repo = match model_name {
-            Some(m) => m.to_string(),
-            None => std::env::var("SEMBLE_MODEL_PATH")
-                .unwrap_or_else(|_| DEFAULT_MODEL_NAME.to_string()),
-        };
-        let model = StaticModel::from_pretrained(&path_or_repo, None, None, None)
-            .with_context(|| format!("Failed to load model from {path_or_repo}"))?;
+    /// Load the embedding model named by `model`, a Hugging Face repo id or a
+    /// local path. The name is resolved to a local directory and never fetched
+    /// from the network; a model that is not present locally is a hard error.
+    pub fn load(model: &str) -> Result<Self> {
+        let dir = resolve_local_model(model)?;
+        let model = StaticModel::from_pretrained(&dir, None, None, None)
+            .with_context(|| format!("Failed to load model from {}", dir.display()))?;
         let dim = model.encode_single("a").len();
         Ok(Self { model, dim })
     }
@@ -41,6 +39,106 @@ impl StaticEncoder {
         let flat: Vec<f32> = vecs.into_iter().flatten().collect();
         Array2::from_shape_vec((n, self.dim), flat).context("Failed to reshape embeddings")
     }
+}
+
+/// Resolve `name_or_path` to a local model directory without any network
+/// access. Search order: an explicit local directory, `SEMBLE_MODEL_PATH`, the
+/// Hugging Face hub cache, the current directory, then the semble binary's
+/// directory. Errors listing where it looked when nothing matches.
+fn resolve_local_model(name_or_path: &str) -> Result<PathBuf> {
+    // A directory the caller points at directly wins; the loader validates it.
+    if Path::new(name_or_path).is_dir() {
+        return Ok(PathBuf::from(name_or_path));
+    }
+
+    let mut searched: Vec<PathBuf> = Vec::new();
+    let bare = name_or_path.rsplit('/').next().unwrap_or(name_or_path);
+
+    if let Some(dir) = std::env::var_os("SEMBLE_MODEL_PATH").map(PathBuf::from) {
+        if is_model_dir(&dir) {
+            return Ok(dir);
+        }
+        searched.push(dir);
+    }
+
+    // Hugging Face hub cache: models--{org}--{name}/snapshots/{commit}/.
+    let hub_dir = format!("models--{}", name_or_path.replace('/', "--"));
+    for root in hf_cache_roots() {
+        let repo = root.join(&hub_dir);
+        match newest_model_snapshot(&repo) {
+            Some(dir) => return Ok(dir),
+            None => searched.push(repo.join("snapshots")),
+        }
+    }
+
+    // Working directory and the binary's directory, under both the full
+    // "org/name" id and the bare model name.
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            roots.push(dir.to_path_buf());
+        }
+    }
+    for root in roots {
+        for cand in [root.join(name_or_path), root.join(bare)] {
+            if is_model_dir(&cand) {
+                return Ok(cand);
+            }
+            searched.push(cand);
+        }
+    }
+
+    let looked = searched
+        .iter()
+        .map(|p| format!("  {}", p.display()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    bail!(
+        "Embedding model {name_or_path:?} not found locally, and semble never \
+         downloads from the network.\nLooked in:\n{looked}\n\nFetch it into one \
+         of those locations, e.g.:\n  huggingface-cli download {name_or_path} \
+         --local-dir ./{bare}\nor point at an existing copy with `--model <dir>` \
+         or `SEMBLE_MODEL_PATH=<dir>`."
+    )
+}
+
+/// A model2vec model directory has these three files side by side.
+fn is_model_dir(dir: &Path) -> bool {
+    dir.join("config.json").is_file()
+        && dir.join("tokenizer.json").is_file()
+        && dir.join("model.safetensors").is_file()
+}
+
+/// Hugging Face hub cache roots, most specific first.
+fn hf_cache_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(c) = std::env::var_os("HF_HUB_CACHE") {
+        roots.push(PathBuf::from(c));
+    }
+    if let Some(h) = std::env::var_os("HF_HOME") {
+        roots.push(PathBuf::from(h).join("hub"));
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        roots.push(PathBuf::from(home).join(".cache/huggingface/hub"));
+    }
+    roots
+}
+
+/// Newest snapshot under a hub repo dir that looks like a model directory.
+fn newest_model_snapshot(repo_dir: &Path) -> Option<PathBuf> {
+    std::fs::read_dir(repo_dir.join("snapshots"))
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|d| is_model_dir(d))
+        .max_by_key(|d| {
+            std::fs::metadata(d)
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::UNIX_EPOCH)
+        })
 }
 
 pub struct SemanticIndex {

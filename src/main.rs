@@ -82,10 +82,10 @@ enum Commands {
         /// Match lines shown per chunk in grouped output
         #[arg(long, default_value_t = 3)]
         max_match_lines: usize,
-        /// Embedding model (HF repo id or local path).
-        /// Overrides SEMBLE_MODEL_PATH and the default embedding model.
-        #[arg(long)]
-        model: Option<String>,
+        /// Embedding model, a Hugging Face repo id or a local path. Resolved
+        /// locally (HF cache, cwd, binary dir) and never downloaded.
+        #[arg(long, default_value = "minishlab/potion-code-16M-v2")]
+        model: String,
     },
 }
 
@@ -145,7 +145,7 @@ fn main() {
                 def_weight,
                 candidate_multiplier: candidates,
             };
-            let index = build_index(&path, include_text_files, model.as_deref(), &index_params);
+            let index = build_index(&path, include_text_files, &model, &index_params);
 
             let results = index.search(query.as_str(), top_k, &search_params, None, None);
 
@@ -248,14 +248,12 @@ fn print_json(results: &[SearchResult]) {
 fn build_index(
     path: &str,
     include_text_files: bool,
-    model: Option<&str>,
+    model: &str,
     index_params: &IndexParams,
 ) -> SembleIndex {
-    let encoder = model.map(|m| {
-        StaticEncoder::load(Some(m)).unwrap_or_else(|e| {
-            eprintln!("Failed to load model {m:?}: {e}");
-            process::exit(1);
-        })
+    let encoder = StaticEncoder::load(model).unwrap_or_else(|e| {
+        eprintln!("{e:#}");
+        process::exit(1);
     });
     match SembleIndex::from_path(path, encoder, None, None, include_text_files, index_params) {
         Ok(idx) => idx,
