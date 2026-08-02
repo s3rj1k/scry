@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use model2vec_rs::model::StaticModel;
 use ndarray::{Array1, Array2, Axis};
 

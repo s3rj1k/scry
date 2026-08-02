@@ -1,13 +1,13 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
+use crate::index::IndexParams;
 use crate::index::chunking::chunk_source_sized;
 use crate::index::encoder::{SemanticIndex, StaticEncoder};
 use crate::index::file_walker::{filter_extensions, language_for_path, walk_files};
 use crate::index::symbols::extract_symbols;
-use crate::index::IndexParams;
 use crate::types::Chunk;
 
 pub fn create_index_from_path(

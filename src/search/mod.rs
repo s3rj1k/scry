@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::index::encoder::{SemanticIndex, StaticEncoder};
-use crate::search::ranking::{definition_list, weighted_rrf, Signal};
+use crate::search::ranking::{Signal, definition_list, weighted_rrf};
 use crate::types::{Chunk, MatchLine, SearchResult};
 
 /// Tunable knobs for the search flow. Defaults match the built in values.
