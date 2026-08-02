@@ -7,8 +7,8 @@ pub struct Chunk {
     pub start_line: usize,
     pub end_line: usize,
     pub language: Option<String>,
-    /// Names of the symbols this chunk defines, taken from the AST (populated
-    /// at index time from the dependency graph). Not serialized.
+    /// Names of the symbols this chunk defines, taken from the AST at index
+    /// time. Not serialized.
     #[serde(skip)]
     pub symbols: Vec<String>,
 }

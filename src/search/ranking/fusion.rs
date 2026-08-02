@@ -12,12 +12,8 @@ impl Signal {
     }
 }
 
-/// Weighted Reciprocal Rank Fusion.
-///
-/// Each chunk accrues `weight / (k + rank + 1)` from every signal list it
-/// appears in. Because it operates on rank positions, signals on different
-/// score scales (BM25, cosine, boolean structural signals) combine without any
-/// normalization — a chunk that ranks well across several signals wins.
+/// Weighted Reciprocal Rank Fusion. Each chunk accrues weight over (k + rank)
+/// from every list, so signals on different scales combine without scaling.
 pub fn weighted_rrf(signals: &[Signal], k: f64) -> HashMap<usize, f64> {
     let mut fused: HashMap<usize, f64> = HashMap::new();
     for signal in signals {

@@ -2,12 +2,12 @@ use std::process;
 
 use clap::{Parser, Subcommand};
 
-use semble::encoder::StaticEncoder;
-use semble::filter::smart_strip;
+use semble::format::filter::smart_strip;
+use semble::format::outline::extract_signature_near;
+use semble::format::utils::{format_results, resolve_chunk};
+use semble::index::encoder::StaticEncoder;
 use semble::index::SembleIndex;
-use semble::outline::extract_signature_near;
 use semble::types::SearchResult;
-use semble::utils::{format_results, resolve_chunk};
 
 #[derive(Parser)]
 #[command(
@@ -26,32 +26,32 @@ enum Commands {
     Search {
         /// Keyword, symbol, or function name to search for
         query: String,
-        /// Local path (default: current directory)
+        /// Local path, defaults to the current directory
         #[arg(default_value = ".")]
         path: String,
         /// Number of results
         #[arg(short = 'k', long = "top-k", default_value = "10")]
         top_k: usize,
-        /// Also index non-code text files (.md, .yaml, .json, etc.)
+        /// Also index non code text files like .md, .yaml, .json
         #[arg(long)]
         include_text_files: bool,
         /// Output as JSON (for agent/tool integration)
         #[arg(long)]
         json: bool,
-        /// Compact output: file paths, scores, and match lines only (minimal tokens)
+        /// Compact output with file paths, scores, and match lines only
         #[arg(long)]
         compact: bool,
         /// Strip comments from code chunks in JSON output to reduce tokens
         #[arg(long)]
         strip: bool,
-        /// Outline output: one signature line per chunk (smallest token footprint)
+        /// Outline output, one signature line per chunk
         #[arg(long)]
         outline: bool,
         /// Group results by directory + cap match lines at 3 per chunk
         #[arg(long)]
         group: bool,
         /// Embedding model (HF repo id or local path).
-        /// Overrides SEMBLE_MODEL_PATH; default: minishlab/potion-code-16M.
+        /// Overrides SEMBLE_MODEL_PATH and the default embedding model.
         #[arg(long)]
         model: Option<String>,
     },
@@ -59,15 +59,15 @@ enum Commands {
     FindRelated {
         /// File path as shown in search results
         file_path: String,
-        /// Line number (1-indexed)
+        /// Line number, starting at 1
         line: usize,
-        /// Local path (default: current directory)
+        /// Local path, defaults to the current directory
         #[arg(default_value = ".")]
         path: String,
         /// Number of results
         #[arg(short = 'k', long = "top-k", default_value = "10")]
         top_k: usize,
-        /// Also index non-code text files
+        /// Also index non code text files
         #[arg(long)]
         include_text_files: bool,
         /// Output as JSON (for agent/tool integration)

@@ -8,7 +8,7 @@ const MILD_PENALTY: f64 = 0.7;
 
 const REEXPORT_FILENAMES: &[&str] = &["__init__.py", "package-info.java"];
 
-// Path segments that mark non-canonical code.
+// Path segments that mark non canonical code.
 const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "testing"];
 const COMPAT_DIRS: &[&str] = &["compat", "_compat", "legacy"];
 const EXAMPLE_DIRS: &[&str] = &[
@@ -20,7 +20,7 @@ const EXAMPLE_DIRS: &[&str] = &[
     "docs_src",
 ];
 
-// File-name markers of test files, across languages.
+// File name markers of test files, across languages.
 const TEST_FILE_SUFFIXES: &[&str] = &[
     "_test.py",
     "_test.go",

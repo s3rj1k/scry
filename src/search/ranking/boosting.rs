@@ -54,8 +54,8 @@ fn extract_symbol_name(query: &str) -> &str {
     q
 }
 
-/// Symbol-shaped names present in the query: a namespaced tail (`Foo::bar` →
-/// `bar`, `Foo::bar`) plus any embedded camelCase identifiers.
+/// Symbol shaped names present in the query. A namespaced tail plus any
+/// embedded camelCase identifiers.
 fn query_symbol_names(query: &str) -> HashSet<String> {
     let mut names = HashSet::new();
     let trimmed = query.trim();
@@ -70,14 +70,13 @@ fn query_symbol_names(query: &str) -> HashSet<String> {
 }
 
 /// Whether this chunk defines a symbol with the given name, using the AST
-/// symbols attached at index time (see `index::create`).
+/// symbols attached at index time.
 fn chunk_defines_symbol(chunk: &Chunk, symbol_name: &str) -> bool {
     chunk.symbols.iter().any(|s| s == symbol_name)
 }
 
-/// Signal list: candidate chunks that *define* a symbol named in the query,
-/// preserving the input (base-ranked) order. Empty when the query names no
-/// symbol.
+/// Signal list of candidate chunks that define a symbol named in the query,
+/// preserving the input order. Empty when the query names no symbol.
 pub fn definition_list(query: &str, chunks: &[Chunk], pool: &[usize]) -> Vec<usize> {
     let names = query_symbol_names(query);
     if names.is_empty() {
@@ -141,15 +140,15 @@ fn count_keyword_matches(keywords: &HashSet<String>, parts: &HashSet<String>) ->
     n
 }
 
-/// Signal list: candidate chunks whose file path (stem + parent dir) matches
-/// query keywords, ordered by match strength then base order.
+/// Signal list of candidate chunks whose file path matches query keywords,
+/// ordered by match strength then base order.
 pub fn path_affinity_list(query: &str, chunks: &[Chunk], pool: &[usize]) -> Vec<usize> {
     let keywords = extract_keywords(query);
     if keywords.is_empty() {
         return Vec::new();
     }
     let mut cache: HashMap<String, HashSet<String>> = HashMap::new();
-    // (match_count, base_position, idx) — higher match_count first, base order ties.
+    // (match_count, base_position, idx) with higher match_count first.
     let mut scored: Vec<(usize, usize, usize)> = Vec::new();
     for (pos, &idx) in pool.iter().enumerate() {
         let fp = chunks[idx].file_path.clone();

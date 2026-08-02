@@ -3,11 +3,11 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
-use crate::bm25::Bm25Index;
-use crate::chunking::chunk_source;
-use crate::encoder::{SemanticIndex, StaticEncoder};
-use crate::file_walker::{filter_extensions, language_for_path, walk_files};
-use crate::symbols::extract_symbols;
+use crate::index::bm25::Bm25Index;
+use crate::index::chunking::chunk_source;
+use crate::index::encoder::{SemanticIndex, StaticEncoder};
+use crate::index::file_walker::{filter_extensions, language_for_path, walk_files};
+use crate::index::symbols::extract_symbols;
 use crate::types::Chunk;
 
 const MAX_FILE_BYTES: u64 = 1_000_000;
@@ -75,7 +75,7 @@ pub fn create_index_from_path(
 
         let mut file_chunks = chunk_source(&source, &chunk_path, language);
 
-        // Attach the AST symbols each chunk defines (tag-based) so ranking can
+        // Attach the AST symbols each chunk defines (tag based) so ranking can
         // detect definitions structurally.
         if let Some(lang) = language {
             let symbols = extract_symbols(&source, lang);

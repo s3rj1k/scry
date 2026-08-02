@@ -414,8 +414,8 @@ pub fn walk_files(
     files
 }
 
-/// Heuristic to skip minified / bundled assets that pollute search results.
-/// Filename-pattern only: `.min.js`, `.min.css`, `.bundle.js`, etc.
+/// Heuristic to skip minified or bundled assets that pollute search results.
+/// Filename pattern only, such as `.min.js`, `.min.css`, `.bundle.js`.
 pub fn is_likely_minified(path: &Path) -> bool {
     if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
         let lower = name.to_lowercase();

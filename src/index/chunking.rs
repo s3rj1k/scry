@@ -28,11 +28,8 @@ fn collect_indices<'a>(it: impl Iterator<Item = (usize, &'a str)>) -> Vec<(usize
         .collect()
 }
 
-/// Split `source` into chunks capped near `DESIRED_CHUNK_LENGTH_CHARS`.
-///
-/// Files in a supported language are split at syntax boundaries via tree-sitter
-/// (`text-splitter`'s `CodeSplitter`); anything else — unknown language or a
-/// grammar that fails to load — falls back to semantic text splitting.
+/// Split `source` into chunks capped near `DESIRED_CHUNK_LENGTH_CHARS`. Code
+/// uses tree sitter boundaries, anything else falls back to text splitting.
 pub fn chunk_source(source: &str, file_path: &str, language: Option<&str>) -> Vec<Chunk> {
     if source.trim().is_empty() {
         return Vec::new();

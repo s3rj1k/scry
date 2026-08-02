@@ -28,24 +28,14 @@ fn is_definition_line(line: &str) -> bool {
     SIGNATURE_RE.is_match(line) || ARROW_FN_RE.is_match(line)
 }
 
-/// Extract a signature line for an entire chunk.
-///
-/// Picks the first definition line in the chunk. Multi-line signatures
-/// (`fn foo(\n    arg: T,\n) -> R {`) are joined into one line up to the
-/// terminating `{`, `;`, or `=>`.
+/// Extract a signature line for an entire chunk. Picks the first definition
+/// line and joins a multi line signature into one.
 pub fn extract_signature(content: &str) -> Option<String> {
     extract_signature_near(content, 1, &[])
 }
 
-/// Extract a signature line, preferring the definition closest *above* the
-/// first match line.
-///
-/// `chunk_start_line` is the 1-indexed line number where this chunk begins in
-/// the source file. `match_lines` is a list of absolute line numbers where
-/// the search query matched. If a match exists inside the chunk, the chosen
-/// definition is the nearest `is_definition_line` that occurs at or before
-/// the first match line — so when a chunk contains multiple definitions, the
-/// one whose body actually contains the match is preferred.
+/// Extract a signature line, preferring the definition closest above the first
+/// match line so the chosen one is the definition whose body holds the match.
 pub fn extract_signature_near(
     content: &str,
     chunk_start_line: usize,
@@ -92,11 +82,8 @@ pub fn extract_signature_near(
     Some(collect_signature(&lines, chosen))
 }
 
-/// Join lines starting at `start` into a complete signature.
-///
-/// Tracks paren/bracket depth so multi-line signatures (`fn foo(\n    a,\n    b,\n) -> R {`)
-/// are joined until all parens are closed AND a terminator (`{`, `;`, `=>`) is reached.
-/// Bounded at 20 lines for safety on pathological inputs.
+/// Join lines starting at `start` into a complete signature. Tracks paren depth
+/// until parens close and a terminator is reached. Bounded at 20 lines.
 fn collect_signature(lines: &[&str], start: usize) -> String {
     let mut combined = String::new();
     let mut paren_depth: i32 = 0;
@@ -143,8 +130,7 @@ fn collect_signature(lines: &[&str], start: usize) -> String {
         }
         // Signature that completes on one line (parens closed, no other terminator).
         if paren_depth <= 0 && count == 1 && (trimmed.contains("->") || trimmed.ends_with(')')) {
-            // There may be more to join, so peek one more line before breaking
-            // (e.g. `pub fn foo(x: T)` may be followed by `-> R {`).
+            // There may be more to join, so peek one more line before breaking.
             continue;
         }
         if paren_depth <= 0 && count > 1 && !combined.trim_end().ends_with(',') {
@@ -157,7 +143,7 @@ fn collect_signature(lines: &[&str], start: usize) -> String {
 fn format_signature(line: &str) -> String {
     let trimmed = line.trim();
     let s = trimmed.trim_end_matches('{').trim_end();
-    // Never truncate normal signatures — accuracy first.
+    // Never truncate normal signatures, accuracy first.
     // 500 char ceiling is only a safety net for pathological inputs.
     let max_len = 500;
     if s.chars().count() <= max_len {
@@ -167,12 +153,8 @@ fn format_signature(line: &str) -> String {
     format!("{head}…")
 }
 
-/// Quality metric: does this signature look complete?
-///
-/// A signature is considered "well-formed" if:
-/// - parens balance (no orphan `(` or `)`)
-/// - it ends with one of: `)`, `;`, `=>`, `:`, `}` (for empty bodies), or an identifier
-/// - it isn't the truncation marker `...`
+/// Whether this signature looks complete. It is well formed when parens balance,
+/// it ends with a sensible token, and it is not the truncation marker.
 pub fn is_well_formed(sig: &str) -> bool {
     if sig.ends_with("...") {
         return false;
@@ -261,8 +243,8 @@ mod tests {
 
     #[test]
     fn picks_definition_near_match_line() {
-        // Chunk starts at line 100. Two function definitions: line 100 and line 120.
-        // First match is at line 125 — should pick the line-120 definition.
+        // Chunk starts at line 100 with two function definitions at 100 and 120.
+        // First match is at line 125 so it should pick the definition at 120.
         let mut code = String::new();
         code.push_str("pub fn first_one(a: u32) -> u32 {\n"); // chunk line 0 (abs 100)
         for _ in 0..18 {

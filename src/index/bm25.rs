@@ -2,8 +2,8 @@ use bm25::{Embedder, EmbedderBuilder, Scorer, Tokenizer};
 
 use crate::tokens::tokenize;
 
-/// Adapts semble's code-aware tokenizer (camelCase / snake_case splitting) to
-/// the `bm25` crate, so BM25 indexes the same tokens as the rest of the engine.
+/// Adapts semble's code aware tokenizer (camelCase and snake_case splitting) to
+/// the `bm25` crate so BM25 indexes the same tokens as the rest of the engine.
 #[derive(Default, Clone)]
 struct SembleTokenizer;
 
@@ -13,8 +13,8 @@ impl Tokenizer for SembleTokenizer {
     }
 }
 
-/// In-memory BM25 index backed by the `bm25` crate. Document ids are chunk
-/// indices, so scores align with the semantic index and the chunk array.
+/// In memory BM25 index backed by the `bm25` crate. Document ids are chunk
+/// indices so scores align with the semantic index and the chunk array.
 pub struct Bm25Index {
     embedder: Embedder<u32, SembleTokenizer>,
     scorer: Scorer<usize, u32>,
@@ -22,7 +22,7 @@ pub struct Bm25Index {
 }
 
 impl Bm25Index {
-    /// Build the index from raw (untokenized) document texts; the embedder
+    /// Build the index from raw untokenized document texts. The embedder
     /// tokenizes them via [`SembleTokenizer`].
     pub fn new(documents: &[String]) -> Self {
         let avgdl = if documents.is_empty() {
@@ -48,9 +48,8 @@ impl Bm25Index {
         }
     }
 
-    /// Dense BM25 scores indexed by document id (chunk index). `weight_mask`,
-    /// when set, restricts scoring to a subset of documents (language / path
-    /// filter); masked-out documents keep a score of 0.
+    /// Dense BM25 scores indexed by document id (chunk index). `weight_mask`
+    /// restricts scoring to a subset of documents and the rest keep a score of 0.
     pub fn get_scores(&self, query: &str, weight_mask: Option<&[bool]>) -> Vec<f32> {
         let mut scores = vec![0.0f32; self.num_docs];
         if query.trim().is_empty() {

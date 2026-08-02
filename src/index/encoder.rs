@@ -11,7 +11,7 @@ pub struct StaticEncoder {
 
 impl StaticEncoder {
     pub fn load(model_name: Option<&str>) -> Result<Self> {
-        // Priority: explicit model_name (CLI --model) > SEMBLE_MODEL_PATH env > default
+        // Priority. Explicit model_name from the CLI, then SEMBLE_MODEL_PATH env, then default.
         let path_or_repo = match model_name {
             Some(m) => m.to_string(),
             None => std::env::var("SEMBLE_MODEL_PATH")

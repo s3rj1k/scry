@@ -1,10 +1,5 @@
-//! Language-agnostic symbol extraction via tree-sitter tag queries.
-//!
-//! Instead of a hand-written per-language `match` over AST node kinds, each
-//! supported language ships a `tags.scm` query (vendored under `src/queries/`,
-//! taken from the grammar's own query set). `tree-sitter-tags` runs the query
-//! and reports definitions/references uniformly, so adding a language is just
-//! dropping in its query file.
+//! Language agnostic symbol extraction via tree sitter tag queries. Each
+//! language ships a tags.scm query, run uniformly across all languages.
 
 use std::collections::HashMap;
 
@@ -31,9 +26,8 @@ fn language_and_query(name: &str) -> Option<(Language, &'static str)> {
             tree_sitter_javascript::LANGUAGE,
             include_str!("queries/javascript.scm"),
         ),
-        // TypeScript inherits JavaScript's grammar, so compose both queries:
-        // the JS query captures functions/classes/arrows/methods, the TS query
-        // adds interfaces and modules.
+        // TypeScript inherits JavaScript's grammar so compose both queries. The
+        // JS query captures functions and classes, the TS query adds interfaces.
         "typescript" => (
             tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
             concat!(
@@ -75,8 +69,7 @@ const LANGUAGES: &[&str] = &[
 ];
 
 /// Compiled tag configuration per language, built once. A language whose query
-/// fails to compile is simply omitted (its files get no symbols, but still
-/// index and search).
+/// fails to compile is omitted and its files simply get no symbols.
 static CONFIGS: Lazy<HashMap<&'static str, TagsConfiguration>> = Lazy::new(|| {
     let mut configs = HashMap::new();
     for &lang in LANGUAGES {

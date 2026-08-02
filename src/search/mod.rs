@@ -1,9 +1,11 @@
+pub mod ranking;
+
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use crate::bm25::Bm25Index;
-use crate::encoder::{SemanticIndex, StaticEncoder};
-use crate::ranking::{
+use crate::index::bm25::Bm25Index;
+use crate::index::encoder::{SemanticIndex, StaticEncoder};
+use crate::search::ranking::{
     definition_list, path_affinity_list, rerank_topk, resolve_alpha, weighted_rrf, Signal,
 };
 use crate::types::{Chunk, MatchLine, SearchResult};
@@ -11,9 +13,8 @@ use crate::types::{Chunk, MatchLine, SearchResult};
 const RRF_K: f64 = 60.0;
 const MIN_SCORE_RATIO: f64 = 0.12;
 
-// Fusion weights for the structural signal lists, relative to the combined
-// semantic + lexical weight of 1.0 (alpha + (1 - alpha)). Defining the queried
-// symbol is the strongest signal; path affinity is a moderate one.
+// Weights for the structural signal lists. Defining the queried symbol is the
+// strongest signal and path affinity is a moderate one.
 const W_DEFINITION: f64 = 1.0;
 const W_PATH: f64 = 0.5;
 
@@ -117,7 +118,7 @@ pub fn search_bm25(
             let match_lines = find_match_lines(&chunks[idx], query);
             SearchResult {
                 chunk: chunks[idx].clone(),
-                // Descending pseudo-score so ordering/filtering behave.
+                // Descending pseudo score so ordering and filtering behave.
                 score: 1.0 / (RRF_K + rank as f64 + 1.0),
                 match_lines,
             }
@@ -146,7 +147,7 @@ pub fn search_hybrid(
         Err(_) => return search_bm25(query, bm25_index, chunks, top_k, selector),
     };
 
-    // --- base ranked lists (natural rankings) ---
+    // base ranked lists (natural rankings)
     let sem_ranked: Vec<usize> = semantic_index
         .query(&query_embedding, candidate_count, selector)
         .into_iter()
@@ -158,7 +159,7 @@ pub fn search_hybrid(
         return Vec::new();
     }
 
-    // Preliminary fusion of the two base lists — used only to order the derived
+    // Preliminary fusion of the two base lists, used only to order the derived
     // structural signal lists.
     let base = weighted_rrf(
         &[
@@ -169,11 +170,11 @@ pub fn search_hybrid(
     );
     let pool = order_by_score(&base);
 
-    // --- structural signal lists ---
+    // structural signal lists
     let def_ranked = definition_list(query, chunks, &pool);
     let path_ranked = path_affinity_list(query, chunks, &pool);
 
-    // --- one weighted RRF over every signal list ---
+    // one weighted RRF over every signal list
     let fused = weighted_rrf(
         &[
             Signal::new(alpha_weight, sem_ranked),
@@ -184,7 +185,7 @@ pub fn search_hybrid(
         RRF_K,
     );
 
-    // --- path-noise penalties + per-file diversity + top_k ---
+    // path noise penalties plus per file diversity then top_k
     let ranked = rerank_topk(&fused, chunks, top_k, alpha_weight < 1.0);
 
     let results: Vec<SearchResult> = ranked

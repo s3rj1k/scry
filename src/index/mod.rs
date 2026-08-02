@@ -1,12 +1,17 @@
+pub mod bm25;
+pub mod chunking;
 pub mod create;
+pub mod encoder;
+pub mod file_walker;
+pub mod symbols;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-use crate::bm25::Bm25Index;
-use crate::encoder::{SemanticIndex, StaticEncoder};
+use crate::index::bm25::Bm25Index;
+use crate::index::encoder::{SemanticIndex, StaticEncoder};
 use crate::search::search_hybrid;
 use crate::types::{Chunk, IndexStats, SearchResult};
 use create::create_index_from_path;

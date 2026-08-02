@@ -1,4 +1,4 @@
-use crate::ranking::boosting::is_symbol_query;
+use crate::search::ranking::boosting::is_symbol_query;
 
 const ALPHA_SYMBOL: f64 = 0.3;
 const ALPHA_NL: f64 = 0.5;
