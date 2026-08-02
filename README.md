@@ -13,8 +13,7 @@ Single-binary code search for AI coding agents — returns the exact chunks, not
 ## Install
 
 ```bash
-git clone https://github.com/s3rj1k/scry.git && cd scry
-cargo install --path .
+cargo install --git https://github.com/s3rj1k/scry
 ```
 
 ## Model
